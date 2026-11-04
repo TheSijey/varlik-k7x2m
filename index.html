@@ -68,6 +68,7 @@ input,select{width:100%;padding:12px;border-radius:12px;border:1px solid var(--l
   <button data-act="tab" data-v="rates"><b>₺</b>Kurlar</button>
 </nav>
 <div id="layer"></div>
+<div id="login"></div>
 
 <script>
 // ---------- Tanımlar ----------
@@ -94,8 +95,9 @@ const DEFAULT_RATES = {usd:49.84,eur:55.40,gbp:66.70,gram:6335.51,yarimGram:3168
 const CURS = [['TRY','₺','TL'],['USD','$','USD'],['EUR','€','EUR'],['GBP','£','GBP']];
 
 // ---------- Durum ----------
-let S = {assets:[], rates:{...DEFAULT_RATES}, tab:'sum', cur:'TRY', sumMode:'group', listMode:'loc', hidden:false, status:'', auto:true};
+let S = {assets:[], rates:{...DEFAULT_RATES}, tab:'sum', cur:'TRY', sumMode:'group', listMode:'loc', hidden:false, status:'', auto:true, user:null};
 let timers = {}, pending = new Set();
+let fb = null, unsub = null;
 try{ S.hidden = localStorage.getItem('hide')==='1'; S.cur = localStorage.getItem('cur')||'TRY'; }catch(e){}
 
 const esc = s => String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -120,10 +122,22 @@ function groupBy(items, fn){
   return [...m.entries()].map(([name,list])=>({name,list,total:sum(list)})).sort((a,b)=>b.total-a.total);
 }
 
-// ---------- Veri katmanı (yalnızca bu cihazda saklanır) ----------
+// ---------- Bulut ayarı (Firebase) ----------
+// Aşağıdaki değerler boşsa sayfa yalnızca bu cihazda çalışır.
+const FIREBASE_CONFIG = {
+  apiKey: "AIzaSyBd4INdzdZEefvUFR0BAsVwJ9cE7taWg2w",
+  authDomain: "varliklar-46b7e.firebaseapp.com",
+  projectId: "varliklar-46b7e",
+  storageBucket: "varliklar-46b7e.firebasestorage.app",
+  appId: "1:1064165688208:web:0dcbd114efef87f5d7e915"
+};
+const CLOUD = !!FIREBASE_CONFIG.apiKey;
+const FB_VER = '10.12.2';
+
+// ---------- Veri katmanı ----------
 function saveLocal(){
   try{
-    localStorage.setItem('assets',JSON.stringify(S.assets));
+    if(!CLOUD) localStorage.setItem('assets',JSON.stringify(S.assets));
     localStorage.setItem('rates',JSON.stringify(S.rates));
     localStorage.setItem('auto',S.auto?'1':'0');
   }catch(e){ toast('Bu tarayıcı kayıt yapmayı engelliyor'); }
@@ -132,8 +146,20 @@ function toast(t){
   const el = document.createElement('div'); el.className='toast'; el.textContent=t; document.body.appendChild(el);
   setTimeout(()=>el.remove(),2600);
 }
-async function persist(a){ pending.delete(a.id); delete timers[a.id]; saveLocal(); }
-async function removeAsset(id){ S.assets = S.assets.filter(a=>a.id!==id); render(); saveLocal(); }
+async function persist(a){
+  pending.delete(a.id); delete timers[a.id];
+  if(CLOUD){
+    if(!fb || !S.user){ toast('Giriş yapılmadı'); return; }
+    const body = {location:a.location, owner:a.owner, kind:a.kind, amount:+a.amount||0};
+    try{ await fb.fs.setDoc(fb.fs.doc(fb.db,'assets',a.id), body); }catch(e){ toast('Kaydedilemedi, bağlantını kontrol et'); }
+  } else saveLocal();
+}
+async function removeAsset(id){
+  S.assets = S.assets.filter(a=>a.id!==id); render();
+  if(CLOUD){
+    try{ await fb.fs.deleteDoc(fb.fs.doc(fb.db,'assets',id)); }catch(e){ toast('Silinemedi'); }
+  } else saveLocal();
+}
 function adjust(id,d){
   const a = S.assets.find(x=>x.id===id); if(!a) return;
   a.amount = Math.max(0,(+a.amount||0)+d); pending.add(id); render();
@@ -166,25 +192,74 @@ function exportData(){
   const ta = document.getElementById('bk'); if(ta){ ta.value = json; ta.select(); }
   try{ navigator.clipboard.writeText(json).then(()=>toast('Yedek kopyalandı')).catch(()=>toast('Metni elle kopyala')); }catch(e){ toast('Metni elle kopyala'); }
 }
-function importData(){
+async function importData(){
   const ta = document.getElementById('bk');
   try{
     const o = JSON.parse(ta.value);
     if(!Array.isArray(o.assets)) throw new Error('bad');
-    S.assets = o.assets.map(a=>({id:String(a.id||uid()), location:String(a.location||''), owner:String(a.owner||''), kind:KINDS[a.kind]?a.kind:'tl', amount:+a.amount||0}));
+    S.assets = o.assets.map(a=>({id:String(a.id||uid()).replace(/[^A-Za-z0-9_-]/g,''), location:String(a.location||''), owner:String(a.owner||''), kind:KINDS[a.kind]?a.kind:'tl', amount:+a.amount||0}));
     if(o.rates && typeof o.rates==='object') S.rates = {...DEFAULT_RATES, ...o.rates};
-    saveLocal(); render(); toast('Yedek yüklendi');
+    saveLocal(); render(); toast('Yedek yükleniyor…');
+    if(CLOUD){ for(const a of S.assets) await persist(a); }
+    toast('Yedek yüklendi');
   }catch(e){ toast('Yedek okunamadı'); }
+}
+
+// ---------- Giriş ve bulut eşitleme ----------
+function showLogin(err, mail){
+  document.getElementById('login').innerHTML = `<div class="sheetbg"><div class="sheet">
+    <h2>Giriş yap</h2>
+    <label>E-posta</label><input id="l_mail" type="email" autocomplete="username" autocapitalize="none" autocorrect="off" value="${esc(mail||'')}">
+    <label>Şifre</label><input id="l_pw" type="password" autocomplete="current-password">
+    ${err?`<div class="note" style="color:var(--red)">${esc(err)}</div>`:''}
+    <div class="btns"><button class="btn p" data-act="login">Giriş yap</button></div>
+  </div></div>`;
+}
+const hideLogin = () => { document.getElementById('login').innerHTML=''; };
+async function doLogin(){
+  const m = document.getElementById('l_mail').value.trim();
+  const p = document.getElementById('l_pw').value;
+  if(!m || !p){ showLogin('E-posta ve şifreyi yaz', m); return; }
+  try{ await fb.au.signInWithEmailAndPassword(fb.auth, m, p); }
+  catch(e){ showLogin('E-posta veya şifre hatalı', m); }
+}
+async function startCloud(){
+  try{
+    const base = `https://www.gstatic.com/firebasejs/${FB_VER}/`;
+    const [appm, authm, fsm] = await Promise.all([
+      import(base+'firebase-app.js'), import(base+'firebase-auth.js'), import(base+'firebase-firestore.js')
+    ]);
+    const app = appm.initializeApp(FIREBASE_CONFIG);
+    fb = {au:authm, fs:fsm, auth:authm.getAuth(app), db:fsm.getFirestore(app)};
+    authm.onAuthStateChanged(fb.auth, user=>{
+      if(unsub){ unsub(); unsub=null; }
+      S.user = user;
+      if(!user){ S.assets = []; showLogin(); render(); return; }
+      hideLogin();
+      unsub = fsm.onSnapshot(fsm.collection(fb.db,'assets'), snap=>{
+        const local = new Map(S.assets.map(a=>[a.id,a]));
+        S.assets = snap.docs.map(d=>{
+          const o = d.data()||{};
+          return pending.has(d.id) && local.get(d.id) ? local.get(d.id)
+            : {id:d.id, location:o.location||'', owner:o.owner||'', kind:KINDS[o.kind]?o.kind:'tl', amount:+o.amount||0};
+        });
+        render();
+      }, ()=>{ toast('Buluta erişilemedi, giriş izni olmayabilir'); });
+    });
+  }catch(e){
+    S.status = 'Bulut bağlantısı kurulamadı'; render();
+  }
 }
 
 function init(){
   try{
-    const a = JSON.parse(localStorage.getItem('assets')||'null'); if(Array.isArray(a)) S.assets = a;
+    if(!CLOUD){ const a = JSON.parse(localStorage.getItem('assets')||'null'); if(Array.isArray(a)) S.assets = a; }
     const r = JSON.parse(localStorage.getItem('rates')||'null'); if(r && typeof r==='object') S.rates = {...DEFAULT_RATES, ...r};
     S.auto = localStorage.getItem('auto')!=='0';
   }catch(e){}
   render();
   if(S.auto) fetchRates();
+  if(CLOUD) startCloud();
 }
 
 // ---------- Görünümler ----------
@@ -235,7 +310,7 @@ function viewList(){
 
 function viewRates(){
   const inputs = RATE_FIELDS.map(f=>`<div><label>${f[1]}</label><input inputmode="decimal" data-rate="${f[0]}" value="${esc(S.rates[f[0]]!=null?String(Math.round(S.rates[f[0]]*100)/100).replace('.',','):'')}"></div>`).join('');
-  return `<h1>Kurlar</h1>
+  return `<h1>Kurlar</h1>${CLOUD&&S.user?`<div class="card"><div class="note" style="margin-top:0">Giriş yapılan hesap: ${esc(S.user.email)}</div><div class="btns"><button class="btn" data-act="logout">Çıkış yap</button></div></div>`:''}
   ${S.status?`<div class="warn">${esc(S.status)}</div>`:''}
   ${S.rates.est?`<div class="warn">Şimdilik 4 Kasım 2026 sabahı değerleri kullanılıyor; Sterlin ve yarım gram tahminidir.</div>`:''}
   <div class="card">
@@ -247,7 +322,7 @@ function viewRates(){
     <div class="btns"><button class="btn" data-act="saverates">Elle girdiklerimi kaydet</button></div>
   </div>
   <div class="card"><div class="gh" style="margin:0 0 4px"><span>Yedek</span></div>
-    <div class="note" style="margin-top:0">Veriler yalnızca bu cihazda, bu tarayıcıda durur. Tarayıcı verisi silinirse kaybolur, düzenli yedek al. Başka cihaza da buradan taşıyabilirsin.</div>
+    <div class="note" style="margin-top:0">${CLOUD?'Kayıtların bulutta saklanır ve senin ile eşinin cihazlarında aynıdır. Yine de arada yedek almak iyidir.':'Veriler yalnızca bu cihazda, bu tarayıcıda durur. Tarayıcı verisi silinirse kaybolur, düzenli yedek al. Başka cihaza da buradan taşıyabilirsin.'}</div>
     <textarea id="bk" rows="4" style="width:100%;padding:10px;border-radius:12px;border:1px solid var(--line);background:var(--bg);color:var(--tx);font:12px monospace" placeholder="Yedek metni burada görünür veya buraya yapıştır"></textarea>
     <div class="btns"><button class="btn" data-act="export">Yedeği al</button><button class="btn" data-act="import">Yedeği yükle</button></div>
   </div>`;
@@ -315,6 +390,8 @@ document.addEventListener('click', e=>{
   else if(act==='close') closeSheet();
   else if(act==='save') saveSheet(id||null);
   else if(act==='del'){ closeSheet(); removeAsset(id); }
+  else if(act==='login') doLogin();
+  else if(act==='logout'){ if(fb) fb.au.signOut(fb.auth); }
   else if(act==='fetchrates'){ S.auto = true; saveLocal(); fetchRates(); }
   else if(act==='export') exportData();
   else if(act==='import') importData();
