@@ -1,0 +1,331 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="robots" content="noindex,nofollow">
+
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Varlıklarım">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<title>Varlıklarımız</title>
+<style>
+:root{--bg:#f2f3f7;--card:#fff;--tx:#14161c;--mut:#6b7080;--line:#e4e6ee;--pri:#3b4fd8;--gold:#d9a514;--fx:#2e9e5b;--tl:#3b6fd4;--red:#d64545}
+@media(prefers-color-scheme:dark){:root{--bg:#0f1116;--card:#1a1d26;--tx:#eef0f6;--mut:#9097aa;--line:#2a2e3b;--pri:#7b8cff}}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+body{margin:0;background:var(--bg);color:var(--tx);font:16px/1.4 -apple-system,system-ui,"Segoe UI",Roboto,sans-serif;padding-bottom:calc(90px + env(safe-area-inset-bottom))}
+.wrap{max-width:640px;margin:0 auto;padding:calc(14px + env(safe-area-inset-top)) 14px 0}
+h1{font-size:26px;margin:6px 2px 14px;display:flex;justify-content:space-between;align-items:center}
+.card{background:var(--card);border-radius:18px;padding:16px;margin-bottom:12px}
+.hero{background:linear-gradient(135deg,#4a3fd0,#2f7be0);color:#fff}
+.hero .big{font-size:38px;font-weight:700;letter-spacing:-.5px;margin:4px 0}
+.hero small{opacity:.8}
+.seg{display:flex;background:var(--card);border-radius:12px;padding:3px;margin-bottom:12px;gap:2px}
+.seg button{flex:1;border:0;background:none;color:var(--mut);padding:8px 4px;border-radius:10px;font:inherit;font-size:14px;font-weight:600}
+.seg button.on{background:var(--pri);color:#fff}
+.row3{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:12px}
+.mini{background:var(--card);border-radius:16px;padding:12px}
+.mini .l{font-size:12px;color:var(--mut);display:flex;align-items:center;gap:6px}
+.mini .v{font-weight:700;font-size:16px;margin-top:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.dot{width:10px;height:10px;border-radius:50%;display:inline-block;flex:none}
+.legend div{display:flex;align-items:center;gap:8px;padding:6px 0;font-size:15px}
+.legend .n{flex:1}.legend .p{color:var(--mut);width:42px;text-align:right}
+.donut{display:block;margin:6px auto 10px}
+.gh{display:flex;justify-content:space-between;font-weight:700;margin:16px 4px 8px}
+.gh span:last-child{color:var(--mut);font-weight:600}
+.item{display:flex;align-items:center;gap:10px;padding:12px 0;border-top:1px solid var(--line)}
+.item:first-child{border-top:0}
+.item .m{flex:1;min-width:0}.item .t{font-weight:600}.item .s{font-size:12px;color:var(--mut);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.item .r{text-align:right}.item .r .s{display:block}
+.pm{width:34px;height:34px;border-radius:50%;border:0;background:var(--line);color:var(--tx);font-size:20px;line-height:1;flex:none}
+.tabs{position:fixed;left:0;right:0;bottom:0;background:var(--card);border-top:1px solid var(--line);display:flex;padding-bottom:env(safe-area-inset-bottom)}
+.tabs button{flex:1;border:0;background:none;color:var(--mut);padding:10px 0 8px;font:inherit;font-size:12px;font-weight:600}
+.tabs button b{display:block;font-size:20px;line-height:1.1}
+.tabs button.on{color:var(--pri)}
+.fab{position:fixed;right:18px;bottom:calc(76px + env(safe-area-inset-bottom));width:56px;height:56px;border-radius:50%;border:0;background:var(--pri);color:#fff;font-size:30px;box-shadow:0 6px 18px rgba(0,0,0,.25)}
+.eye{border:0;background:var(--card);color:var(--tx);border-radius:12px;padding:6px 12px;font-size:18px}
+.sheetbg{position:fixed;inset:0;background:rgba(0,0,0,.45);display:flex;align-items:flex-end;justify-content:center;z-index:10}
+.sheet{background:var(--card);width:100%;max-width:640px;border-radius:22px 22px 0 0;padding:18px 16px calc(18px + env(safe-area-inset-bottom));max-height:92vh;overflow:auto}
+.sheet h2{margin:0 0 12px;font-size:20px}
+label{display:block;font-size:13px;color:var(--mut);margin:10px 2px 4px}
+input,select{width:100%;padding:12px;border-radius:12px;border:1px solid var(--line);background:var(--bg);color:var(--tx);font:inherit}
+.btns{display:flex;gap:10px;margin-top:16px}
+.btn{flex:1;padding:13px;border-radius:12px;border:0;font:inherit;font-weight:700;background:var(--line);color:var(--tx)}
+.btn.p{background:var(--pri);color:#fff}.btn.d{background:none;color:var(--red);flex:none;padding:13px 10px}
+.note{font-size:12px;color:var(--mut);margin:8px 2px}
+.warn{background:#fff4d6;color:#7a5a00;border-radius:12px;padding:10px 12px;font-size:13px;margin-bottom:12px}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(150px + env(safe-area-inset-bottom));background:#222;color:#fff;padding:10px 16px;border-radius:12px;font-size:14px;z-index:20}
+.empty{text-align:center;color:var(--mut);padding:26px 10px}
+</style>
+</head>
+<body>
+<div class="wrap" id="app"></div>
+<nav class="tabs" id="tabs">
+  <button data-act="tab" data-v="sum"><b>◔</b>Özet</button>
+  <button data-act="tab" data-v="list"><b>☰</b>Varlıklar</button>
+  <button data-act="tab" data-v="rates"><b>₺</b>Kurlar</button>
+</nav>
+<div id="layer"></div>
+
+<script>
+// ---------- Tanımlar ----------
+const GROUPS = {gold:{n:'Altın',c:'#d9a514'}, fx:{n:'Döviz',c:'#2e9e5b'}, tl:{n:'TL',c:'#3b6fd4'}};
+const KINDS = {
+  tl:{n:'TL',g:'tl',u:''},
+  usd:{n:'Dolar (USD)',g:'fx',u:''},
+  eur:{n:'Euro (EUR)',g:'fx',u:''},
+  gbp:{n:'Sterlin (GBP)',g:'fx',u:''},
+  gram:{n:'Gram altın',g:'gold',u:'gr'},
+  yarimGram:{n:'Yarım gram',g:'gold',u:'adet'},
+  ceyrek:{n:'Çeyrek altın',g:'gold',u:'adet'},
+  yarim:{n:'Yarım altın',g:'gold',u:'adet'},
+  tam:{n:'Tam altın',g:'gold',u:'adet'},
+  cumhuriyet:{n:'Cumhuriyet altını',g:'gold',u:'adet'}
+};
+const RATE_FIELDS = [
+  ['usd','Dolar / TL'],['eur','Euro / TL'],['gbp','Sterlin / TL'],
+  ['gram','Gram altın (TL)'],['yarimGram','Yarım gram (TL)'],['ceyrek','Çeyrek altın (TL)'],
+  ['yarim','Yarım altın (TL)'],['tam','Tam altın (TL)'],['cumhuriyet','Cumhuriyet (TL)']
+];
+// 4 Kasım 2026 sabahı piyasa değerleri; Sterlin ve Yarım gram tahminidir.
+const DEFAULT_RATES = {usd:49.84,eur:55.40,gbp:66.70,gram:6335.51,yarimGram:3168,ceyrek:10436,yarim:20865,tam:41751,cumhuriyet:41576,updated:'2026-11-04',est:true};
+const CURS = [['TRY','₺','TL'],['USD','$','USD'],['EUR','€','EUR'],['GBP','£','GBP']];
+
+// ---------- Durum ----------
+let S = {assets:[], rates:{...DEFAULT_RATES}, tab:'sum', cur:'TRY', sumMode:'group', listMode:'loc', hidden:false, status:'', auto:true};
+let timers = {}, pending = new Set();
+try{ S.hidden = localStorage.getItem('hide')==='1'; S.cur = localStorage.getItem('cur')||'TRY'; }catch(e){}
+
+const esc = s => String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const num = s => { const v = parseFloat(String(s||'').replace(',','.')); return isFinite(v)?v:0; };
+const uid = () => Date.now().toString(36)+Math.random().toString(36).slice(2,7);
+
+// ---------- Hesap ----------
+const tlPer = k => k==='tl' ? 1 : (+S.rates[k]||0);
+const tlVal = a => (+a.amount||0) * tlPer(a.kind);
+const curInfo = () => CURS.find(c=>c[0]===S.cur) || CURS[0];
+function conv(tl){ return S.cur==='TRY' ? tl : tl / (+S.rates[S.cur.toLowerCase()]||1); }
+function money(tl){
+  if(S.hidden) return '••••••';
+  const ci = curInfo();
+  return ci[1] + Math.round(conv(tl)).toLocaleString('tr-TR');
+}
+const sum = items => items.reduce((t,a)=>t+tlVal(a),0);
+const fmtAmt = a => (+a.amount||0).toLocaleString('tr-TR',{maximumFractionDigits:2}) + (KINDS[a.kind]&&KINDS[a.kind].u ? ' '+KINDS[a.kind].u : '');
+function groupBy(items, fn){
+  const m = new Map();
+  items.forEach(a=>{ const k = fn(a)||'—'; if(!m.has(k)) m.set(k,[]); m.get(k).push(a); });
+  return [...m.entries()].map(([name,list])=>({name,list,total:sum(list)})).sort((a,b)=>b.total-a.total);
+}
+
+// ---------- Veri katmanı (yalnızca bu cihazda saklanır) ----------
+function saveLocal(){
+  try{
+    localStorage.setItem('assets',JSON.stringify(S.assets));
+    localStorage.setItem('rates',JSON.stringify(S.rates));
+    localStorage.setItem('auto',S.auto?'1':'0');
+  }catch(e){ toast('Bu tarayıcı kayıt yapmayı engelliyor'); }
+}
+function toast(t){
+  const el = document.createElement('div'); el.className='toast'; el.textContent=t; document.body.appendChild(el);
+  setTimeout(()=>el.remove(),2600);
+}
+async function persist(a){ pending.delete(a.id); delete timers[a.id]; saveLocal(); }
+async function removeAsset(id){ S.assets = S.assets.filter(a=>a.id!==id); render(); saveLocal(); }
+function adjust(id,d){
+  const a = S.assets.find(x=>x.id===id); if(!a) return;
+  a.amount = Math.max(0,(+a.amount||0)+d); pending.add(id); render();
+  clearTimeout(timers[id]); timers[id] = setTimeout(()=>persist(a),400);
+}
+async function saveRates(r){ S.rates = r; S.auto = false; render(); saveLocal(); }
+
+// Altın türlerinin has altın karşılığı (gram). Çeyrek 1,75 g, yarım 3,5 g, tam 7 g, cumhuriyet 7,2 g, 22 ayar (0,916)
+const COIN_G = {yarimGram:0.5, ceyrek:1.75*0.916, yarim:3.5*0.916, tam:7*0.916, cumhuriyet:7.2*0.916};
+async function fetchRates(){
+  S.status = 'Kurlar güncelleniyor…'; render();
+  try{
+    const [fx, gd] = await Promise.all([
+      fetch('https://open.er-api.com/v6/latest/USD').then(r=>r.json()),
+      fetch('https://api.gold-api.com/price/XAU').then(r=>r.json())
+    ]);
+    const t = fx.rates.TRY, e = fx.rates.EUR, p = fx.rates.GBP, xau = gd.price;
+    if(!(t>0 && e>0 && p>0 && xau>0)) throw new Error('bad');
+    const gram = xau/31.1035*t;
+    const r = {usd:t, eur:t/e, gbp:t/p, gram, updated:new Date().toLocaleString('tr-TR',{dateStyle:'short',timeStyle:'short'}), est:false};
+    Object.keys(COIN_G).forEach(k=>{ r[k] = gram*COIN_G[k]; });
+    S.rates = r; S.status = ''; saveLocal();
+  }catch(e){
+    S.status = 'Kurlar alınamadı, son kayıtlı kurlar kullanılıyor';
+  }
+  render();
+}
+function exportData(){
+  const json = JSON.stringify({assets:S.assets, rates:S.rates});
+  const ta = document.getElementById('bk'); if(ta){ ta.value = json; ta.select(); }
+  try{ navigator.clipboard.writeText(json).then(()=>toast('Yedek kopyalandı')).catch(()=>toast('Metni elle kopyala')); }catch(e){ toast('Metni elle kopyala'); }
+}
+function importData(){
+  const ta = document.getElementById('bk');
+  try{
+    const o = JSON.parse(ta.value);
+    if(!Array.isArray(o.assets)) throw new Error('bad');
+    S.assets = o.assets.map(a=>({id:String(a.id||uid()), location:String(a.location||''), owner:String(a.owner||''), kind:KINDS[a.kind]?a.kind:'tl', amount:+a.amount||0}));
+    if(o.rates && typeof o.rates==='object') S.rates = {...DEFAULT_RATES, ...o.rates};
+    saveLocal(); render(); toast('Yedek yüklendi');
+  }catch(e){ toast('Yedek okunamadı'); }
+}
+
+function init(){
+  try{
+    const a = JSON.parse(localStorage.getItem('assets')||'null'); if(Array.isArray(a)) S.assets = a;
+    const r = JSON.parse(localStorage.getItem('rates')||'null'); if(r && typeof r==='object') S.rates = {...DEFAULT_RATES, ...r};
+    S.auto = localStorage.getItem('auto')!=='0';
+  }catch(e){}
+  render();
+  if(S.auto) fetchRates();
+}
+
+// ---------- Görünümler ----------
+function donut(slices){
+  const R=70, C=2*Math.PI*R, tot = slices.reduce((t,s)=>t+s.v,0)||1; let off=0;
+  const segs = slices.map(s=>{ const len = s.v/tot*C; const x = `<circle r="${R}" cx="100" cy="100" fill="none" stroke="${s.c}" stroke-width="28" stroke-dasharray="${len} ${C-len}" stroke-dashoffset="${-off}" transform="rotate(-90 100 100)"/>`; off+=len; return x; }).join('');
+  return `<svg class="donut" width="200" height="200" viewBox="0 0 200 200"><circle r="${R}" cx="100" cy="100" fill="none" stroke="var(--line)" stroke-width="28"/>${segs}</svg>`;
+}
+const PAL = ['#5b6cf0','#13a89e','#f08a24','#e0568c','#8b5cf6','#4cb86b','#b5651d','#2aa7d8'];
+
+function viewSum(){
+  const all = S.assets, total = sum(all);
+  let slices;
+  if(S.sumMode==='group') slices = Object.keys(GROUPS).map(g=>({n:GROUPS[g].n,c:GROUPS[g].c,v:sum(all.filter(a=>KINDS[a.kind]&&KINDS[a.kind].g===g))})).filter(s=>s.v>0);
+  else slices = groupBy(all, a=>S.sumMode==='loc'?a.location:a.owner).map((g,i)=>({n:g.name,c:PAL[i%PAL.length],v:g.total})).filter(s=>s.v>0);
+  const ci = CURS.map(c=>`<button data-act="cur" data-v="${c[0]}" class="${S.cur===c[0]?'on':''}">${c[2]}</button>`).join('');
+  const mode = [['group','Türe göre'],['loc','Konuma göre'],['owner','Kişiye göre']].map(m=>`<button data-act="smode" data-v="${m[0]}" class="${S.sumMode===m[0]?'on':''}">${m[1]}</button>`).join('');
+  const minis = Object.keys(GROUPS).map(g=>`<div class="mini"><div class="l"><span class="dot" style="background:${GROUPS[g].c}"></span>${GROUPS[g].n}</div><div class="v">${money(sum(all.filter(a=>KINDS[a.kind]&&KINDS[a.kind].g===g)))}</div></div>`).join('');
+  const legend = slices.map(s=>`<div><span class="dot" style="background:${s.c}"></span><span class="n">${esc(s.n)}</span><span>${money(s.v)}</span><span class="p">${S.hidden?'':'%'+Math.round(s.v/total*100)}</span></div>`).join('');
+  return `
+  <h1>Varlıklarımız <button class="eye" data-act="eye">${S.hidden?'🙈':'👁'}</button></h1>
+  <div class="seg">${ci}</div>
+  <div class="card hero"><small>Toplam varlık</small><div class="big">${money(total)}</div><small>${S.status||('Kurlar: '+esc(S.rates.updated||''))}</small></div>
+  <div class="row3">${minis}</div>
+  <div class="card">
+    <div class="seg" style="background:var(--bg)">${mode}</div>
+    ${slices.length ? donut(slices)+`<div class="legend">${legend}</div>` : '<div class="empty">Henüz varlık yok.<br>Varlıklar sekmesinden ekleyebilirsin.</div>'}
+  </div>`;
+}
+
+function viewList(){
+  const groups = groupBy(S.assets, a=>S.listMode==='loc'?a.location:a.owner);
+  const mode = [['loc','Konuma göre'],['owner','Kişiye göre']].map(m=>`<button data-act="lmode" data-v="${m[0]}" class="${S.listMode===m[0]?'on':''}">${m[1]}</button>`).join('');
+  const body = groups.map(g=>`
+    <div class="gh"><span>${esc(g.name)}</span><span>${money(g.total)}</span></div>
+    <div class="card" style="padding:4px 14px">${g.list.map(a=>{
+      const k = KINDS[a.kind]||KINDS.tl, quick = !!k.u;
+      const sub = S.listMode==='loc' ? a.owner : a.location;
+      return `<div class="item" data-act="edit" data-id="${esc(a.id)}">
+        <span class="dot" style="background:${GROUPS[k.g].c}"></span>
+        <div class="m"><div class="t">${esc(k.n)}</div><div class="s">${esc(sub)}</div></div>
+        ${quick?`<button class="pm" data-act="adj" data-id="${esc(a.id)}" data-d="-1">−</button>`:''}
+        <div class="r"><div class="t">${S.hidden?'••••':fmtAmt(a)}</div><span class="s">${money(tlVal(a))}</span></div>
+        ${quick?`<button class="pm" data-act="adj" data-id="${esc(a.id)}" data-d="1">+</button>`:''}
+      </div>`; }).join('')}</div>`).join('');
+  return `<h1>Varlıklar</h1><div class="seg">${mode}</div>${body || '<div class="empty">Henüz varlık yok.<br>Sağ alttaki + ile ekle.</div>'}<button class="fab" data-act="add">+</button>`;
+}
+
+function viewRates(){
+  const inputs = RATE_FIELDS.map(f=>`<div><label>${f[1]}</label><input inputmode="decimal" data-rate="${f[0]}" value="${esc(S.rates[f[0]]!=null?String(Math.round(S.rates[f[0]]*100)/100).replace('.',','):'')}"></div>`).join('');
+  return `<h1>Kurlar</h1>
+  ${S.status?`<div class="warn">${esc(S.status)}</div>`:''}
+  ${S.rates.est?`<div class="warn">Şimdilik 4 Kasım 2026 sabahı değerleri kullanılıyor; Sterlin ve yarım gram tahminidir.</div>`:''}
+  <div class="card">
+    <div class="note" style="margin-top:0">${S.auto?'Kurlar açılışta internetten otomatik güncellenir.':'Elle girdiğin kurlar kullanılıyor.'} Son güncelleme: ${esc(S.rates.updated||'—')}</div>
+    <div class="btns"><button class="btn p" data-act="fetchrates">Şimdi güncelle</button></div>
+  </div>
+  <div class="card"><div class="gh" style="margin:0 0 4px"><span>Elle gir</span></div><div class="grid2">${inputs}</div>
+    <div class="note">Kuyumcudaki çeyrek, yarım, tam ve cumhuriyet satış fiyatlarını yazabilirsin. Kaydedince otomatik güncelleme kapanır, "Şimdi güncelle" ile tekrar açılır.</div>
+    <div class="btns"><button class="btn" data-act="saverates">Elle girdiklerimi kaydet</button></div>
+  </div>
+  <div class="card"><div class="gh" style="margin:0 0 4px"><span>Yedek</span></div>
+    <div class="note" style="margin-top:0">Veriler yalnızca bu cihazda, bu tarayıcıda durur. Tarayıcı verisi silinirse kaybolur, düzenli yedek al. Başka cihaza da buradan taşıyabilirsin.</div>
+    <textarea id="bk" rows="4" style="width:100%;padding:10px;border-radius:12px;border:1px solid var(--line);background:var(--bg);color:var(--tx);font:12px monospace" placeholder="Yedek metni burada görünür veya buraya yapıştır"></textarea>
+    <div class="btns"><button class="btn" data-act="export">Yedeği al</button><button class="btn" data-act="import">Yedeği yükle</button></div>
+  </div>`;
+}
+
+function render(){
+  const app = document.getElementById('app');
+  const y = window.scrollY;
+  app.innerHTML = S.tab==='sum' ? viewSum() : S.tab==='list' ? viewList() : viewRates();
+  document.querySelectorAll('#tabs button').forEach(b=>b.classList.toggle('on', b.dataset.v===S.tab));
+  window.scrollTo(0,y);
+}
+
+// ---------- Düzenleme penceresi ----------
+function openSheet(id){
+  const a = id ? S.assets.find(x=>x.id===id) : null;
+  const locs = [...new Set(S.assets.map(x=>x.location).filter(Boolean))];
+  const owners = [...new Set(['Ben','Eşim',...S.assets.map(x=>x.owner).filter(Boolean)])];
+  let lastOwner = 'Ben'; try{ lastOwner = localStorage.getItem('lastOwner')||'Ben'; }catch(e){}
+  const v = a || {location:'',owner:lastOwner,kind:'tl',amount:0};
+  const kopts = Object.keys(KINDS).map(k=>`<option value="${k}" ${v.kind===k?'selected':''}>${KINDS[k].n}</option>`).join('');
+  document.getElementById('layer').innerHTML = `
+  <div class="sheetbg" data-act="closebg"><div class="sheet">
+    <h2>${a?'Varlığı düzenle':'Varlık ekle'}</h2>
+    <label>Konum (ev, yazlık, banka adı...)</label>
+    <input id="f_loc" list="dl_loc" value="${esc(v.location)}" placeholder="Örn. Ziraat Bankası"><datalist id="dl_loc">${locs.map(l=>`<option value="${esc(l)}">`).join('')}</datalist>
+    <label>Kimin</label>
+    <input id="f_own" list="dl_own" value="${esc(v.owner)}"><datalist id="dl_own">${owners.map(l=>`<option value="${esc(l)}">`).join('')}</datalist>
+    <label>Tür</label><select id="f_kind">${kopts}</select>
+    <div class="grid2"><div><label id="f_aml">Miktar</label><input id="f_amt" inputmode="decimal" value="${a?esc(String(v.amount).replace('.',',')):''}"></div>
+    <div><label>Ekle / çıkar (örn. 2 veya -2)</label><input id="f_dlt" inputmode="text" placeholder="0"></div></div>
+    <div class="btns">${a?'<button class="btn d" data-act="del" data-id="'+esc(a.id)+'">Sil</button>':''}<button class="btn" data-act="close">Vazgeç</button><button class="btn p" data-act="save" data-id="${a?esc(a.id):''}">Kaydet</button></div>
+  </div></div>`;
+  const upd = () => { const k = KINDS[document.getElementById('f_kind').value]; document.getElementById('f_aml').textContent = k.u==='gr'?'Gram':k.u==='adet'?'Adet':'Tutar'; };
+  document.getElementById('f_kind').addEventListener('change',upd); upd();
+}
+const closeSheet = () => { document.getElementById('layer').innerHTML=''; };
+
+async function saveSheet(id){
+  const loc = document.getElementById('f_loc').value.trim();
+  if(!loc){ toast('Konum yazmalısın'); return; }
+  const owner = document.getElementById('f_own').value.trim() || 'Ben';
+  const kind = document.getElementById('f_kind').value;
+  const amount = Math.max(0, num(document.getElementById('f_amt').value) + num(document.getElementById('f_dlt').value));
+  try{ localStorage.setItem('lastOwner',owner); }catch(e){}
+  let a = id ? S.assets.find(x=>x.id===id) : null;
+  if(a){ Object.assign(a,{location:loc,owner,kind,amount}); }
+  else { a = {id:uid(),location:loc,owner,kind,amount}; S.assets.push(a); }
+  closeSheet(); render(); await persist(a);
+}
+
+// ---------- Olaylar ----------
+document.addEventListener('click', e=>{
+  const el = e.target.closest('[data-act]'); if(!el) return;
+  const act = el.dataset.act, v = el.dataset.v, id = el.dataset.id;
+  if(act==='closebg'){ if(e.target===el) closeSheet(); return; }
+  if(act==='adj'){ e.stopPropagation(); adjust(id,+el.dataset.d); return; }
+  if(act==='tab'){ S.tab=v; render(); window.scrollTo(0,0); }
+  else if(act==='cur'){ S.cur=v; try{localStorage.setItem('cur',v);}catch(_){} render(); }
+  else if(act==='smode'){ S.sumMode=v; render(); }
+  else if(act==='lmode'){ S.listMode=v; render(); }
+  else if(act==='eye'){ S.hidden=!S.hidden; try{localStorage.setItem('hide',S.hidden?'1':'0');}catch(_){} render(); }
+  else if(act==='add') openSheet(null);
+  else if(act==='edit') openSheet(id);
+  else if(act==='close') closeSheet();
+  else if(act==='save') saveSheet(id||null);
+  else if(act==='del'){ closeSheet(); removeAsset(id); }
+  else if(act==='fetchrates'){ S.auto = true; saveLocal(); fetchRates(); }
+  else if(act==='export') exportData();
+  else if(act==='import') importData();
+  else if(act==='saverates'){
+    const r = {...S.rates};
+    document.querySelectorAll('[data-rate]').forEach(i=>{ const n = num(i.value); if(n>0) r[i.dataset.rate]=n; });
+    r.updated = new Date().toLocaleString('tr-TR',{dateStyle:'short',timeStyle:'short'}); r.est = false;
+    saveRates(r); toast('Kurlar kaydedildi');
+  }
+});
+init();
+</script>
+</body>
+</html>
