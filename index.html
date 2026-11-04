@@ -24,7 +24,7 @@ h1{font-size:26px;margin:6px 2px 14px;display:flex;justify-content:space-between
 .seg{display:flex;background:var(--card);border-radius:12px;padding:3px;margin-bottom:12px;gap:2px}
 .seg button{flex:1;border:0;background:none;color:var(--mut);padding:8px 4px;border-radius:10px;font:inherit;font-size:14px;font-weight:600}
 .seg button.on{background:var(--pri);color:#fff}
-.row3{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:12px}
+.row3{display:grid;grid-template-columns:repeat(auto-fit,minmax(96px,1fr));gap:10px;margin-bottom:12px}
 .mini{background:var(--card);border-radius:16px;padding:12px}
 .mini .l{font-size:12px;color:var(--mut);display:flex;align-items:center;gap:6px}
 .mini .v{font-weight:700;font-size:16px;margin-top:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -50,13 +50,17 @@ h1{font-size:26px;margin:6px 2px 14px;display:flex;justify-content:space-between
 .sheet h2{margin:0 0 12px;font-size:20px}
 label{display:block;font-size:13px;color:var(--mut);margin:10px 2px 4px}
 input,select{width:100%;padding:12px;border-radius:12px;border:1px solid var(--line);background:var(--bg);color:var(--tx);font:inherit}
-.btns{display:flex;gap:10px;margin-top:16px}
-.btn{flex:1;padding:13px;border-radius:12px;border:0;font:inherit;font-weight:700;background:var(--line);color:var(--tx)}
+.btns{display:flex;gap:10px;margin-top:16px;flex-wrap:wrap}
+.btn{flex:1;min-width:110px;padding:13px;border-radius:12px;border:0;font:inherit;font-weight:700;background:var(--line);color:var(--tx)}
 .btn.p{background:var(--pri);color:#fff}.btn.d{background:none;color:var(--red);flex:none;padding:13px 10px}
 .note{font-size:12px;color:var(--mut);margin:8px 2px}
 .warn{background:#fff4d6;color:#7a5a00;border-radius:12px;padding:10px 12px;font-size:13px;margin-bottom:12px}
 .grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 .toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(150px + env(safe-area-inset-bottom));background:#222;color:#fff;padding:10px 16px;border-radius:12px;font-size:14px;z-index:20}
+.chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+.chip{border:1px solid var(--line);background:var(--bg);color:var(--tx);border-radius:999px;padding:6px 12px;font:inherit;font-size:13px}
+.chip.on{background:var(--pri);color:#fff;border-color:var(--pri)}
+.addto{border:0;background:var(--line);color:var(--tx);border-radius:50%;width:24px;height:24px;margin-left:6px;font-size:14px;line-height:1;vertical-align:middle}
 .empty{text-align:center;color:var(--mut);padding:26px 10px}
 </style>
 </head>
@@ -72,7 +76,7 @@ input,select{width:100%;padding:12px;border-radius:12px;border:1px solid var(--l
 
 <script>
 // ---------- Tanımlar ----------
-const GROUPS = {gold:{n:'Altın',c:'#d9a514'}, fx:{n:'Döviz',c:'#2e9e5b'}, tl:{n:'TL',c:'#3b6fd4'}};
+const GROUPS = {gold:{n:'Altın',c:'#d9a514'}, fx:{n:'Döviz',c:'#2e9e5b'}, tl:{n:'TL',c:'#3b6fd4'}, other:{n:'Diğer',c:'#8b5cf6'}};
 const KINDS = {
   tl:{n:'TL',g:'tl',u:''},
   usd:{n:'Dolar (USD)',g:'fx',u:''},
@@ -101,12 +105,25 @@ let fb = null, unsub = null;
 try{ S.hidden = localStorage.getItem('hide')==='1'; S.cur = localStorage.getItem('cur')||'TRY'; }catch(e){}
 
 const esc = s => String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-const num = s => { const v = parseFloat(String(s||'').replace(',','.')); return isFinite(v)?v:0; };
+// Türkçe biçim: 1.250,50 (nokta binlik, virgül ondalık). Eksi işaretini korur.
+const numTR = s => { const t = String(s||'').replace(/\./g,'').replace(',','.'); const v = parseFloat(t); return isFinite(v)?v:0; };
+const fmtIn = n => (+n||0).toLocaleString('tr-TR',{maximumFractionDigits:4});
+function fmtMoneyInput(el){
+  let v = el.value.replace(/[^0-9,\-]/g,'');
+  const neg = el.dataset.neg==='1' && v.startsWith('-');
+  v = v.replace(/-/g,'');
+  const parts = v.split(',');
+  let int = parts[0].replace(/^0+(?=\d)/,'').replace(/\B(?=(\d{3})+(?!\d))/g,'.');
+  let out = int; if(parts.length>1) out += ',' + parts.slice(1).join('').slice(0,4);
+  el.value = (neg?'-':'') + out;
+}
 const uid = () => Date.now().toString(36)+Math.random().toString(36).slice(2,7);
 
 // ---------- Hesap ----------
 const tlPer = k => k==='tl' ? 1 : (+S.rates[k]||0);
-const tlVal = a => (+a.amount||0) * tlPer(a.kind);
+const kindOf = a => a.kind==='custom' ? {n:a.typeName||'Diğer',g:'other',u:''} : (KINDS[a.kind]||KINDS.tl);
+const normAsset = (id,o) => ({id, location:String(o.location||''), owner:String(o.owner||''), kind:(o.kind==='custom'||KINDS[o.kind])?o.kind:'tl', typeName:String(o.typeName||''), cur:['tl','usd','eur','gbp'].includes(o.cur)?o.cur:'tl', amount:+o.amount||0});
+const tlVal = a => (+a.amount||0) * tlPer(a.kind==='custom' ? (a.cur||'tl') : a.kind);
 const curInfo = () => CURS.find(c=>c[0]===S.cur) || CURS[0];
 function conv(tl){ return S.cur==='TRY' ? tl : tl / (+S.rates[S.cur.toLowerCase()]||1); }
 function money(tl){
@@ -115,7 +132,7 @@ function money(tl){
   return ci[1] + Math.round(conv(tl)).toLocaleString('tr-TR');
 }
 const sum = items => items.reduce((t,a)=>t+tlVal(a),0);
-const fmtAmt = a => (+a.amount||0).toLocaleString('tr-TR',{maximumFractionDigits:2}) + (KINDS[a.kind]&&KINDS[a.kind].u ? ' '+KINDS[a.kind].u : '');
+const fmtAmt = a => (+a.amount||0).toLocaleString('tr-TR',{maximumFractionDigits:2}) + (a.kind==='custom' ? ' '+String(a.cur||'tl').toUpperCase() : (kindOf(a).u ? ' '+kindOf(a).u : ''));
 function groupBy(items, fn){
   const m = new Map();
   items.forEach(a=>{ const k = fn(a)||'—'; if(!m.has(k)) m.set(k,[]); m.get(k).push(a); });
@@ -150,7 +167,7 @@ async function persist(a){
   pending.delete(a.id); delete timers[a.id];
   if(CLOUD){
     if(!fb || !S.user){ toast('Giriş yapılmadı'); return; }
-    const body = {location:a.location, owner:a.owner, kind:a.kind, amount:+a.amount||0};
+    const body = {location:a.location, owner:a.owner, kind:a.kind, typeName:a.typeName||'', cur:a.cur||'tl', amount:+a.amount||0};
     try{ await fb.fs.setDoc(fb.fs.doc(fb.db,'assets',a.id), body); }catch(e){ toast('Kaydedilemedi, bağlantını kontrol et'); }
   } else saveLocal();
 }
@@ -197,7 +214,7 @@ async function importData(){
   try{
     const o = JSON.parse(ta.value);
     if(!Array.isArray(o.assets)) throw new Error('bad');
-    S.assets = o.assets.map(a=>({id:String(a.id||uid()).replace(/[^A-Za-z0-9_-]/g,''), location:String(a.location||''), owner:String(a.owner||''), kind:KINDS[a.kind]?a.kind:'tl', amount:+a.amount||0}));
+    S.assets = o.assets.map(a=>normAsset(String(a.id||uid()).replace(/[^A-Za-z0-9_-]/g,''), a));
     if(o.rates && typeof o.rates==='object') S.rates = {...DEFAULT_RATES, ...o.rates};
     saveLocal(); render(); toast('Yedek yükleniyor…');
     if(CLOUD){ for(const a of S.assets) await persist(a); }
@@ -241,7 +258,7 @@ async function startCloud(){
         S.assets = snap.docs.map(d=>{
           const o = d.data()||{};
           return pending.has(d.id) && local.get(d.id) ? local.get(d.id)
-            : {id:d.id, location:o.location||'', owner:o.owner||'', kind:KINDS[o.kind]?o.kind:'tl', amount:+o.amount||0};
+            : normAsset(d.id, o);
         });
         render();
       }, ()=>{ toast('Buluta erişilemedi, giriş izni olmayabilir'); });
@@ -273,11 +290,11 @@ const PAL = ['#5b6cf0','#13a89e','#f08a24','#e0568c','#8b5cf6','#4cb86b','#b5651
 function viewSum(){
   const all = S.assets, total = sum(all);
   let slices;
-  if(S.sumMode==='group') slices = Object.keys(GROUPS).map(g=>({n:GROUPS[g].n,c:GROUPS[g].c,v:sum(all.filter(a=>KINDS[a.kind]&&KINDS[a.kind].g===g))})).filter(s=>s.v>0);
+  if(S.sumMode==='group') slices = Object.keys(GROUPS).map(g=>({n:GROUPS[g].n,c:GROUPS[g].c,v:sum(all.filter(a=>kindOf(a).g===g))})).filter(s=>s.v>0);
   else slices = groupBy(all, a=>S.sumMode==='loc'?a.location:a.owner).map((g,i)=>({n:g.name,c:PAL[i%PAL.length],v:g.total})).filter(s=>s.v>0);
   const ci = CURS.map(c=>`<button data-act="cur" data-v="${c[0]}" class="${S.cur===c[0]?'on':''}">${c[2]}</button>`).join('');
   const mode = [['group','Türe göre'],['loc','Konuma göre'],['owner','Kişiye göre']].map(m=>`<button data-act="smode" data-v="${m[0]}" class="${S.sumMode===m[0]?'on':''}">${m[1]}</button>`).join('');
-  const minis = Object.keys(GROUPS).map(g=>`<div class="mini"><div class="l"><span class="dot" style="background:${GROUPS[g].c}"></span>${GROUPS[g].n}</div><div class="v">${money(sum(all.filter(a=>KINDS[a.kind]&&KINDS[a.kind].g===g)))}</div></div>`).join('');
+  const minis = Object.keys(GROUPS).filter(g=>g!=='other'||all.some(a=>kindOf(a).g==='other')).map(g=>`<div class="mini"><div class="l"><span class="dot" style="background:${GROUPS[g].c}"></span>${GROUPS[g].n}</div><div class="v">${money(sum(all.filter(a=>kindOf(a).g===g)))}</div></div>`).join('');
   const legend = slices.map(s=>`<div><span class="dot" style="background:${s.c}"></span><span class="n">${esc(s.n)}</span><span>${money(s.v)}</span><span class="p">${S.hidden?'':'%'+Math.round(s.v/total*100)}</span></div>`).join('');
   return `
   <h1>Varlıklarımız <button class="eye" data-act="eye">${S.hidden?'🙈':'👁'}</button></h1>
@@ -294,9 +311,9 @@ function viewList(){
   const groups = groupBy(S.assets, a=>S.listMode==='loc'?a.location:a.owner);
   const mode = [['loc','Konuma göre'],['owner','Kişiye göre']].map(m=>`<button data-act="lmode" data-v="${m[0]}" class="${S.listMode===m[0]?'on':''}">${m[1]}</button>`).join('');
   const body = groups.map(g=>`
-    <div class="gh"><span>${esc(g.name)}</span><span>${money(g.total)}</span></div>
+    <div class="gh"><span>${esc(g.name)}<button class="addto" data-act="addto" data-v="${esc(g.name)}">＋</button></span><span>${money(g.total)}</span></div>
     <div class="card" style="padding:4px 14px">${g.list.map(a=>{
-      const k = KINDS[a.kind]||KINDS.tl, quick = !!k.u;
+      const k = kindOf(a), quick = !!k.u;
       const sub = S.listMode==='loc' ? a.owner : a.location;
       return `<div class="item" data-act="edit" data-id="${esc(a.id)}">
         <span class="dot" style="background:${GROUPS[k.g].c}"></span>
@@ -309,7 +326,7 @@ function viewList(){
 }
 
 function viewRates(){
-  const inputs = RATE_FIELDS.map(f=>`<div><label>${f[1]}</label><input inputmode="decimal" data-rate="${f[0]}" value="${esc(S.rates[f[0]]!=null?String(Math.round(S.rates[f[0]]*100)/100).replace('.',','):'')}"></div>`).join('');
+  const inputs = RATE_FIELDS.map(f=>`<div><label>${f[1]}</label><input inputmode="decimal" data-money="1" data-rate="${f[0]}" value="${esc(S.rates[f[0]]!=null?fmtIn(Math.round(S.rates[f[0]]*100)/100):'')}"></div>`).join('');
   return `<h1>Kurlar</h1>${CLOUD&&S.user?`<div class="card"><div class="note" style="margin-top:0">Giriş yapılan hesap: ${esc(S.user.email)}</div><div class="btns"><button class="btn" data-act="logout">Çıkış yap</button></div></div>`:''}
   ${S.status?`<div class="warn">${esc(S.status)}</div>`:''}
   ${S.rates.est?`<div class="warn">Şimdilik 4 Kasım 2026 sabahı değerleri kullanılıyor; Sterlin ve yarım gram tahminidir.</div>`:''}
@@ -337,41 +354,68 @@ function render(){
 }
 
 // ---------- Düzenleme penceresi ----------
-function openSheet(id){
+function openSheet(id, pre){
   const a = id ? S.assets.find(x=>x.id===id) : null;
-  const locs = [...new Set(S.assets.map(x=>x.location).filter(Boolean))];
+  const locs = [...new Set(S.assets.map(x=>x.location).filter(Boolean))].sort();
   const owners = [...new Set(['Ben','Eşim',...S.assets.map(x=>x.owner).filter(Boolean)])];
+  const types = [...new Set(S.assets.filter(x=>x.kind==='custom'&&x.typeName).map(x=>x.typeName))].sort();
   let lastOwner = 'Ben'; try{ lastOwner = localStorage.getItem('lastOwner')||'Ben'; }catch(e){}
-  const v = a || {location:'',owner:lastOwner,kind:'tl',amount:0};
-  const kopts = Object.keys(KINDS).map(k=>`<option value="${k}" ${v.kind===k?'selected':''}>${KINDS[k].n}</option>`).join('');
+  const v = a || Object.assign({location:'',owner:lastOwner,kind:'tl',typeName:'',cur:'tl',amount:0}, pre||{});
+  const kopts = Object.keys(KINDS).map(k=>`<option value="${k}" ${v.kind===k?'selected':''}>${KINDS[k].n}</option>`).join('')
+    + `<option value="custom" ${v.kind==='custom'?'selected':''}>＋ Kendi türüm (hisse, fon, araç...)</option>`;
+  const copts = [['tl','TL'],['usd','USD'],['eur','EUR'],['gbp','GBP']].map(c=>`<option value="${c[0]}" ${(v.cur||'tl')===c[0]?'selected':''}>${c[1]}</option>`).join('');
+  const chips = (list,act,cur) => list.length ? `<div class="chips">${list.map(x=>`<button type="button" class="chip${x===cur?' on':''}" data-act="${act}" data-v="${esc(x)}">${esc(x)}</button>`).join('')}</div>` : '';
   document.getElementById('layer').innerHTML = `
   <div class="sheetbg" data-act="closebg"><div class="sheet">
     <h2>${a?'Varlığı düzenle':'Varlık ekle'}</h2>
     <label>Konum (ev, yazlık, banka adı...)</label>
-    <input id="f_loc" list="dl_loc" value="${esc(v.location)}" placeholder="Örn. Ziraat Bankası"><datalist id="dl_loc">${locs.map(l=>`<option value="${esc(l)}">`).join('')}</datalist>
+    <input id="f_loc" value="${esc(v.location)}" placeholder="Yeni konum yaz veya aşağıdan seç">
+    ${chips(locs,'pickloc',v.location)}
     <label>Kimin</label>
-    <input id="f_own" list="dl_own" value="${esc(v.owner)}"><datalist id="dl_own">${owners.map(l=>`<option value="${esc(l)}">`).join('')}</datalist>
+    <input id="f_own" value="${esc(v.owner)}" placeholder="Yeni kişi yaz veya aşağıdan seç">
+    ${chips(owners,'pickown',v.owner)}
     <label>Tür</label><select id="f_kind">${kopts}</select>
-    <div class="grid2"><div><label id="f_aml">Miktar</label><input id="f_amt" inputmode="decimal" value="${a?esc(String(v.amount).replace('.',',')):''}"></div>
-    <div><label>Ekle / çıkar (örn. 2 veya -2)</label><input id="f_dlt" inputmode="text" placeholder="0"></div></div>
-    <div class="btns">${a?'<button class="btn d" data-act="del" data-id="'+esc(a.id)+'">Sil</button>':''}<button class="btn" data-act="close">Vazgeç</button><button class="btn p" data-act="save" data-id="${a?esc(a.id):''}">Kaydet</button></div>
+    <div id="f_custom" style="display:none">
+      <label>Türün adı</label><input id="f_tname" value="${esc(v.typeName)}" placeholder="Örn. Hisse senedi, Fon, Araç">
+      ${chips(types,'picktype',v.typeName)}
+      <label>Değeri hangi para biriminde giriyorsun</label><select id="f_cur">${copts}</select>
+      <div class="note">Bu türün değeri kurla değişmez, güncel değeri sen yazarsın.</div>
+    </div>
+    <div class="grid2"><div><label id="f_aml">Miktar</label><input id="f_amt" data-money="1" inputmode="decimal" value="${a?esc(fmtIn(v.amount)):''}"></div>
+    <div><label>Ekle / çıkar (örn. 2 veya -2)</label><input id="f_dlt" data-money="1" data-neg="1" inputmode="text" placeholder="0"></div></div>
+    <div class="btns">${a?'<button class="btn d" data-act="del" data-id="'+esc(a.id)+'">Sil</button>':''}<button class="btn" data-act="close">Vazgeç</button><button class="btn p" data-act="save" data-id="${a?esc(a.id):''}">Kaydet</button>${a?'':'<button class="btn" data-act="savenew">Kaydet, yenisini ekle</button>'}</div>
   </div></div>`;
-  const upd = () => { const k = KINDS[document.getElementById('f_kind').value]; document.getElementById('f_aml').textContent = k.u==='gr'?'Gram':k.u==='adet'?'Adet':'Tutar'; };
+  const upd = () => {
+    const kv = document.getElementById('f_kind').value;
+    document.getElementById('f_custom').style.display = kv==='custom' ? 'block' : 'none';
+    const u = kv==='custom' ? 'v' : KINDS[kv].u;
+    document.getElementById('f_aml').textContent = u==='gr'?'Gram':u==='adet'?'Adet':u==='v'?'Toplam değer':'Tutar';
+  };
   document.getElementById('f_kind').addEventListener('change',upd); upd();
 }
 const closeSheet = () => { document.getElementById('layer').innerHTML=''; };
 
-async function saveSheet(id){
+async function saveSheet(id, again){
   const loc = document.getElementById('f_loc').value.trim();
   if(!loc){ toast('Konum yazmalısın'); return; }
   const owner = document.getElementById('f_own').value.trim() || 'Ben';
   const kind = document.getElementById('f_kind').value;
-  const amount = Math.max(0, num(document.getElementById('f_amt').value) + num(document.getElementById('f_dlt').value));
+  const typeName = kind==='custom' ? document.getElementById('f_tname').value.trim() : '';
+  if(kind==='custom' && !typeName){ toast('Türün adını yaz'); return; }
+  const cur = kind==='custom' ? document.getElementById('f_cur').value : 'tl';
+  const amount = Math.max(0, numTR(document.getElementById('f_amt').value) + numTR(document.getElementById('f_dlt').value));
   try{ localStorage.setItem('lastOwner',owner); }catch(e){}
   let a = id ? S.assets.find(x=>x.id===id) : null;
-  if(a){ Object.assign(a,{location:loc,owner,kind,amount}); }
-  else { a = {id:uid(),location:loc,owner,kind,amount}; S.assets.push(a); }
-  closeSheet(); render(); await persist(a);
+  if(a){ Object.assign(a,{location:loc,owner,kind,typeName,cur,amount}); }
+  else { a = {id:uid(),location:loc,owner,kind,typeName,cur,amount}; S.assets.push(a); }
+  closeSheet(); render();
+  if(again) openSheet(null,{location:loc,owner});
+  await persist(a);
+}
+
+function pick(el, inputId){
+  document.getElementById(inputId).value = el.dataset.v;
+  el.parentNode.querySelectorAll('.chip').forEach(c=>c.classList.toggle('on', c===el));
 }
 
 // ---------- Olaylar ----------
@@ -386,9 +430,14 @@ document.addEventListener('click', e=>{
   else if(act==='lmode'){ S.listMode=v; render(); }
   else if(act==='eye'){ S.hidden=!S.hidden; try{localStorage.setItem('hide',S.hidden?'1':'0');}catch(_){} render(); }
   else if(act==='add') openSheet(null);
+  else if(act==='addto'){ e.stopPropagation(); const nm = v==='—' ? '' : v; openSheet(null, S.listMode==='loc' ? {location:nm} : {owner:nm}); }
+  else if(act==='pickown') pick(el,'f_own');
+  else if(act==='pickloc') pick(el,'f_loc');
+  else if(act==='picktype') pick(el,'f_tname');
+  else if(act==='savenew') saveSheet(null,true);
   else if(act==='edit') openSheet(id);
   else if(act==='close') closeSheet();
-  else if(act==='save') saveSheet(id||null);
+  else if(act==='save') saveSheet(id||null,false);
   else if(act==='del'){ closeSheet(); removeAsset(id); }
   else if(act==='login') doLogin();
   else if(act==='logout'){ if(fb) fb.au.signOut(fb.auth); }
@@ -397,11 +446,12 @@ document.addEventListener('click', e=>{
   else if(act==='import') importData();
   else if(act==='saverates'){
     const r = {...S.rates};
-    document.querySelectorAll('[data-rate]').forEach(i=>{ const n = num(i.value); if(n>0) r[i.dataset.rate]=n; });
+    document.querySelectorAll('[data-rate]').forEach(i=>{ const n = numTR(i.value); if(n>0) r[i.dataset.rate]=n; });
     r.updated = new Date().toLocaleString('tr-TR',{dateStyle:'short',timeStyle:'short'}); r.est = false;
     saveRates(r); toast('Kurlar kaydedildi');
   }
 });
+document.addEventListener('input', e=>{ if(e.target.dataset && e.target.dataset.money==='1') fmtMoneyInput(e.target); });
 init();
 </script>
 </body>
