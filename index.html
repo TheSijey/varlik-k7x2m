@@ -357,9 +357,10 @@ function render(){
 function openSheet(id, pre){
   const a = id ? S.assets.find(x=>x.id===id) : null;
   const locs = [...new Set(S.assets.map(x=>x.location).filter(Boolean))].sort();
-  const owners = [...new Set(['Ben','Eşim',...S.assets.map(x=>x.owner).filter(Boolean)])];
+  const owners = [...new Set(S.assets.map(x=>x.owner).filter(Boolean))].sort();
   const types = [...new Set(S.assets.filter(x=>x.kind==='custom'&&x.typeName).map(x=>x.typeName))].sort();
-  let lastOwner = 'Ben'; try{ lastOwner = localStorage.getItem('lastOwner')||'Ben'; }catch(e){}
+  let lastOwner = ''; try{ lastOwner = localStorage.getItem('lastOwner')||''; }catch(e){}
+  if(!owners.includes(lastOwner)) lastOwner = owners.length===1 ? owners[0] : '';
   const v = a || Object.assign({location:'',owner:lastOwner,kind:'tl',typeName:'',cur:'tl',amount:0}, pre||{});
   const kopts = Object.keys(KINDS).map(k=>`<option value="${k}" ${v.kind===k?'selected':''}>${KINDS[k].n}</option>`).join('')
     + `<option value="custom" ${v.kind==='custom'?'selected':''}>＋ Kendi türüm (hisse, fon, araç...)</option>`;
@@ -372,7 +373,7 @@ function openSheet(id, pre){
     <input id="f_loc" value="${esc(v.location)}" placeholder="Yeni konum yaz veya aşağıdan seç">
     ${chips(locs,'pickloc',v.location)}
     <label>Kimin</label>
-    <input id="f_own" value="${esc(v.owner)}" placeholder="Yeni kişi yaz veya aşağıdan seç">
+    <input id="f_own" value="${esc(v.owner)}" placeholder="Kişinin adını yaz">
     ${chips(owners,'pickown',v.owner)}
     <label>Tür</label><select id="f_kind">${kopts}</select>
     <div id="f_custom" style="display:none">
@@ -398,7 +399,8 @@ const closeSheet = () => { document.getElementById('layer').innerHTML=''; };
 async function saveSheet(id, again){
   const loc = document.getElementById('f_loc').value.trim();
   if(!loc){ toast('Konum yazmalısın'); return; }
-  const owner = document.getElementById('f_own').value.trim() || 'Ben';
+  const owner = document.getElementById('f_own').value.trim();
+  if(!owner){ toast('Kimin olduğunu yaz'); return; }
   const kind = document.getElementById('f_kind').value;
   const typeName = kind==='custom' ? document.getElementById('f_tname').value.trim() : '';
   if(kind==='custom' && !typeName){ toast('Türün adını yaz'); return; }
