@@ -184,6 +184,12 @@ const CLOUD = !!FIREBASE_CONFIG.apiKey;
 const FB_VER = '10.12.2';
 
 // ---------- Veri katmanı ----------
+// Her hesabın verisi kendi yolunda: users/{uid}/assets ve users/{uid}/history
+const colRef = n => fb.fs.collection(fb.db,'users',S.user.uid,n);
+const docRef = (n,id) => fb.fs.doc(fb.db,'users',S.user.uid,n,id);
+const MAILDOM = '@varlik.app';
+const toMail = u => { u = String(u||'').trim(); return u.includes('@') ? u : u.toLowerCase()+MAILDOM; };
+const shownName = u => (u && u.email && u.email.endsWith(MAILDOM)) ? u.email.slice(0,-MAILDOM.length) : (u&&u.email||'');
 function saveLocal(){
   try{
     if(!CLOUD) localStorage.setItem('assets',JSON.stringify(S.assets));
@@ -200,13 +206,13 @@ async function persist(a){
   if(CLOUD){
     if(!fb || !S.user){ toast('Giriş yapılmadı'); return; }
     const body = {location:a.location, owner:a.owner, kind:a.kind, typeName:a.typeName||'', cur:a.cur||'tl', amount:+a.amount||0, symbol:a.symbol||'', price:+a.price||0, cost:+a.cost||0, order:Math.round(+a.order)||0, rate:+a.rate||0, start:a.start||'', maturity:a.maturity||''};
-    try{ await fb.fs.setDoc(fb.fs.doc(fb.db,'assets',a.id), body); }catch(e){ toast('Kaydedilemedi, bağlantını kontrol et'); }
+    try{ await fb.fs.setDoc(docRef('assets',a.id), body); }catch(e){ toast('Kaydedilemedi, bağlantını kontrol et'); }
   } else saveLocal();
 }
 async function removeAsset(id){
   S.assets = S.assets.filter(a=>a.id!==id); render();
   if(CLOUD){
-    try{ await fb.fs.deleteDoc(fb.fs.doc(fb.db,'assets',id)); }catch(e){ toast('Silinemedi'); }
+    try{ await fb.fs.deleteDoc(docRef('assets',id)); }catch(e){ toast('Silinemedi'); }
   } else saveLocal();
 }
 function adjust(id,d){
@@ -217,7 +223,9 @@ function adjust(id,d){
 // ---------- Hisse fiyatları (Yahoo Finance, ~15 dk gecikmeli, resmi olmayan kaynak) ----------
 // Tarayıcılar bu istekleri engelleyebilir; o zaman telefon uygulamasının buluta kaydettiği son fiyat kullanılır.
 // Yahoo tarayıcıdan doğrudan erişime izin vermez (CORS); önce doğrudan, olmazsa ücretsiz bir aktarıcı üzerinden denenir.
+let PROXY = ''; try{ PROXY = localStorage.getItem('proxy')||''; }catch(e){}
 async function yget(url){
+  if(PROXY){ try{ const r = await fetch(PROXY+(PROXY.includes('?')?'&':'?')+'url='+encodeURIComponent(url)); if(r.ok) return await r.json(); }catch(e){} }
   try{ const r = await fetch(url); if(r.ok) return await r.json(); }catch(e){}
   try{ const r = await fetch('https://api.allorigins.win/raw?url='+encodeURIComponent(url)); if(r.ok) return await r.json(); }catch(e){}
   return null;
@@ -243,16 +251,16 @@ async function searchStocks(q){
 }
 async function fetchCrypto(ids){
   try{
-    const r = await fetch('https://api.coingecko.com/api/v3/simple/price?ids='+encodeURIComponent(ids.join(','))+'&vs_currencies=try');
-    const j = await r.json(); const out = {};
+    const j = await yget('https://api.coingecko.com/api/v3/simple/price?ids='+encodeURIComponent(ids.join(','))+'&vs_currencies=try');
+    if(!j) return null; const out = {};
     ids.forEach(i=>{ if(j[i] && j[i].try>0) out[i] = j[i].try; });
     return out;
   }catch(e){ return null; }
 }
 async function searchCrypto(q){
   try{
-    const r = await fetch('https://api.coingecko.com/api/v3/search?query='+encodeURIComponent(q));
-    const j = await r.json();
+    const j = await yget('https://api.coingecko.com/api/v3/search?query='+encodeURIComponent(q));
+    if(!j) return null;
     return (j.coins||[]).slice(0,8).map(x=>({symbol:x.id, name:x.name, ex:String(x.symbol||'').toUpperCase()}));
   }catch(e){ return null; }
 }
@@ -324,7 +332,7 @@ async function snapHistory(){
   hist[key] = {t:net, d:debt};
   try{ localStorage.setItem('hist',JSON.stringify(hist)); }catch(e){}
   if(CLOUD && fb && S.user){
-    try{ await fb.fs.setDoc(fb.fs.doc(fb.db,'history',key),{date:key,net,debt}); S.histCloud = true; }
+    try{ await fb.fs.setDoc(docRef('history',key),{date:key,net,debt}); S.histCloud = true; }
     catch(e){ S.histCloud = false; }
   }
   render();
@@ -332,7 +340,7 @@ async function snapHistory(){
 async function loadHistory(){
   if(!(CLOUD && fb && S.user)) return;
   try{
-    const snap = await fb.fs.getDocs(fb.fs.collection(fb.db,'history'));
+    const snap = await fb.fs.getDocs(colRef('history'));
     snap.forEach(d=>{ const o = d.data()||{}; if(typeof o.net==='number') hist[d.id] = {t:o.net, d:+o.debt||0}; });
     S.histCloud = true;
     try{ localStorage.setItem('hist',JSON.stringify(hist)); }catch(e){}
@@ -432,22 +440,61 @@ document.addEventListener('visibilitychange',()=>{
 });
 
 // ---------- Giriş ve bulut eşitleme ----------
-function showLogin(err, mail){
+let loginMode = 'in';
+function showLogin(err, name){
+  const up = loginMode==='up';
   document.getElementById('login').innerHTML = `<div class="sheetbg"><div class="sheet">
-    <h2>Giriş yap</h2>
-    <label>E-posta</label><input id="l_mail" type="email" autocomplete="username" autocapitalize="none" autocorrect="off" value="${esc(mail||'')}">
-    <label>Şifre</label><input id="l_pw" type="password" autocomplete="current-password">
+    <h2>${up?'Hesap oluştur':'Giriş yap'}</h2>
+    <label>${up?'Kullanıcı adı (harf, rakam, nokta, alt çizgi)':'Kullanıcı adı veya e-posta'}</label><input id="l_mail" autocomplete="username" autocapitalize="none" autocorrect="off" value="${esc(name||'')}">
+    <label>Şifre${up?' (en az 6 karakter)':''}</label><input id="l_pw" type="password" autocomplete="${up?'new-password':'current-password'}">
+    ${up?'<label>Şifre (tekrar)</label><input id="l_pw2" type="password" autocomplete="new-password">':''}
     ${err?`<div class="note" style="color:var(--red)">${esc(err)}</div>`:''}
-    <div class="btns"><button class="btn p" data-act="login">Giriş yap</button></div>
+    <div class="btns"><button class="btn p" data-act="${up?'signup':'login'}">${up?'Hesap oluştur':'Giriş yap'}</button></div>
+    <div class="btns" style="margin-top:6px"><button class="btn" data-act="loginmode">${up?'Zaten hesabım var':'Yeni hesap oluştur'}</button></div>
+    ${up?'<div class="note">Her hesabın verisi ayrıdır; başkaları senin kayıtlarını göremez. Şifreni unutursan sıfırlanamaz, not al.</div>':''}
   </div></div>`;
 }
 const hideLogin = () => { document.getElementById('login').innerHTML=''; };
+const authErr = e => { const c = String(e&&e.code||''); return c.includes('email-already')?'Bu kullanıcı adı alınmış':c.includes('weak')?'Şifre çok zayıf (en az 6 karakter)':c.includes('network')?'İnternet bağlantısı yok':c.includes('too-many')?'Çok fazla deneme, biraz bekle':c.includes('invalid-email')?'Kullanıcı adı geçersiz':c.includes('operation-not-allowed')?'Hesap oluşturma kapalı':'Kullanıcı adı veya şifre hatalı'; };
 async function doLogin(){
   const m = document.getElementById('l_mail').value.trim();
   const p = document.getElementById('l_pw').value;
-  if(!m || !p){ showLogin('E-posta ve şifreyi yaz', m); return; }
-  try{ await fb.au.signInWithEmailAndPassword(fb.auth, m, p); }
-  catch(e){ showLogin('E-posta veya şifre hatalı', m); }
+  if(!m || !p){ showLogin('Kullanıcı adı ve şifreyi yaz', m); return; }
+  try{ await fb.au.signInWithEmailAndPassword(fb.auth, toMail(m), p); }
+  catch(e){ showLogin(authErr(e), m); }
+}
+async function doSignup(){
+  const m = document.getElementById('l_mail').value.trim();
+  const p = document.getElementById('l_pw').value, p2 = document.getElementById('l_pw2').value;
+  if(!/^[A-Za-z0-9._]{3,24}$/.test(m)){ showLogin('Kullanıcı adı 3-24 karakter; harf, rakam, nokta, alt çizgi', m); return; }
+  if(p.length<6){ showLogin('Şifre en az 6 karakter olmalı', m); return; }
+  if(p!==p2){ showLogin('İki şifre aynı değil', m); return; }
+  try{ await fb.au.createUserWithEmailAndPassword(fb.auth, toMail(m), p); }
+  catch(e){ showLogin(authErr(e), m); }
+}
+// Eski ortak koleksiyondaki (assets) kayıtları, hesabın boşsa bir kez kendi alanına kopyalar. Eskisi silinmez.
+async function migrateLegacy(){
+  const flag = 'mig_'+S.user.uid;
+  try{ if(localStorage.getItem(flag)) return; }catch(e){}
+  try{
+    const mine = await fb.fs.getDocs(colRef('assets'));
+    if(!mine.empty){ try{ localStorage.setItem(flag,'1'); }catch(e){} return; }
+    const old = await fb.fs.getDocs(fb.fs.collection(fb.db,'assets'));
+    if(old.empty){ return; }
+    for(const d of old.docs){ await fb.fs.setDoc(docRef('assets',d.id), d.data()); }
+    try{ const oh = await fb.fs.getDocs(fb.fs.collection(fb.db,'history')); for(const d of oh.docs){ await fb.fs.setDoc(docRef('history',d.id), d.data()); } }catch(e){}
+    try{ localStorage.setItem(flag,'1'); }catch(e){}
+    toast('Eski kayıtların hesabına taşındı');
+  }catch(e){}
+}
+async function deleteAccount(){
+  if(!(fb && S.user)) return;
+  if(!confirm('Hesabın ve bütün kayıtların kalıcı olarak silinecek. Emin misin?')) return;
+  try{
+    for(const n of ['assets','history']){ const sn = await fb.fs.getDocs(colRef(n)); for(const d of sn.docs) await fb.fs.deleteDoc(d.ref); }
+    await fb.au.deleteUser(fb.auth.currentUser);
+    toast('Hesap silindi');
+  }catch(e){ toast('Silinemedi: çıkış yapıp tekrar giriş yap, sonra dene'); }
 }
 async function startCloud(){
   try{
@@ -461,8 +508,8 @@ async function startCloud(){
       if(unsub){ unsub(); unsub=null; }
       S.user = user;
       if(!user){ S.assets = []; showLogin(); render(); return; }
-      hideLogin(); loadHistory();
-      unsub = fsm.onSnapshot(fsm.collection(fb.db,'assets'), snap=>{
+      hideLogin(); loadHistory(); migrateLegacy();
+      unsub = fsm.onSnapshot(fsm.collection(fb.db,'users',user.uid,'assets'), snap=>{
         const local = new Map(S.assets.map(a=>[a.id,a]));
         S.assets = snap.docs.map(d=>{
           const o = d.data()||{};
@@ -575,7 +622,7 @@ function viewSettings(){
   const nh = Object.keys(hist).length;
   const hs = !CLOUD ? 'Bu cihazda saklanıyor.' : S.histCloud===true ? 'Bulutta saklanıyor, tüm cihazlarda aynı.' : S.histCloud===false ? 'Bulut izin vermedi, bu cihazda saklanıyor. Firestore kurallarına "history" koleksiyonu için izin eklenirse bulutta tutulur.' : 'Henüz kontrol edilmedi.';
   return `<h1>Ayarlar</h1>
-  ${CLOUD&&S.user?`<div class="card"><div class="gh" style="margin:0 0 4px"><span>Hesap</span></div><div class="note" style="margin-top:0">Giriş yapılan hesap: ${esc(S.user.email)}</div><div class="btns"><button class="btn" data-act="logout">Çıkış yap</button></div></div>`:''}
+  ${CLOUD&&S.user?`<div class="card"><div class="gh" style="margin:0 0 4px"><span>Hesap</span></div><div class="note" style="margin-top:0">Giriş yapılan hesap: ${esc(shownName(S.user))}</div><div class="btns"><button class="btn" data-act="logout">Çıkış yap</button><button class="btn d" data-act="delacc">Hesabı sil</button></div></div>`:''}
   <div class="card"><div class="gh" style="margin:0 0 4px"><span>Güvenlik</span></div>
     <div class="note" style="margin-top:0">${pinHash?'PIN kilidi açık ('+pinLen+' haneli). Uygulama açılırken ve 30 saniyeden uzun arka planda kalınca sorulur.':'PIN kilidi kapalı.'} Bu kilit yalnızca bu cihazın ekranını korur.</div>
     <div class="btns"><button class="btn p" data-act="pinset">${pinHash?'PIN\'i değiştir':'PIN koy'}</button>${pinHash?'<button class="btn" data-act="pinoff">PIN\'i kaldır</button>':''}</div>
@@ -583,6 +630,11 @@ function viewSettings(){
   <div class="card"><div class="gh" style="margin:0 0 4px"><span>Dışa aktar</span></div>
     <div class="note" style="margin-top:0">Excel dosyası noktalı virgülle ayrılmış CSV olarak iner; Excel'de doğrudan açılır. PDF için yazdırma ekranında "PDF olarak kaydet" seç.</div>
     <div class="btns"><button class="btn" data-act="csv">Excel (CSV)</button><button class="btn" data-act="print">PDF / Yazdır</button></div>
+  </div>
+  <div class="card"><div class="gh" style="margin:0 0 4px"><span>Fiyat aracısı</span></div>
+    <div class="note" style="margin-top:0">Hisse ve kripto fiyatları tarayıcıda engellenirse kendi aracı adresini buraya yaz (Cloudflare Worker). Boşsa aracı kullanılmaz.</div>
+    <input id="px" value="${esc(PROXY)}" placeholder="https://fiyat.senin-adin.workers.dev" autocapitalize="none" autocorrect="off">
+    <div class="btns"><button class="btn" data-act="saveproxy">Kaydet</button></div>
   </div>
   <div class="card"><div class="gh" style="margin:0 0 4px"><span>Geçmiş</span></div>
     <div class="note" style="margin:0">${nh} günlük net varlık kaydı var. ${esc(hs)}</div>
@@ -749,6 +801,7 @@ document.addEventListener('click', e=>{
   }
   else if(act==='picktype') pick(el,'f_tname');
   else if(act==='pk') pinKey(v);
+  else if(act==='saveproxy'){ PROXY = document.getElementById('px').value.trim(); try{ localStorage.setItem('proxy',PROXY); }catch(_){} toast('Kaydedildi'); refreshStocks(); }
   else if(act==='pinset') openPinSheet();
   else if(act==='pinsave') savePin();
   else if(act==='pinoff') removePin();
@@ -760,6 +813,9 @@ document.addEventListener('click', e=>{
   else if(act==='save') saveSheet(id||null,false);
   else if(act==='del'){ closeSheet(); removeAsset(id); }
   else if(act==='login') doLogin();
+  else if(act==='signup') doSignup();
+  else if(act==='loginmode'){ loginMode = loginMode==='in'?'up':'in'; showLogin(); }
+  else if(act==='delacc') deleteAccount();
   else if(act==='logout'){ if(fb) fb.au.signOut(fb.auth); }
   else if(act==='fetchrates'){ S.auto = true; saveLocal(); fetchRates(); refreshStocks(); }
   else if(act==='export') exportData();
