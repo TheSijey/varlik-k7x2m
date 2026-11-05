@@ -63,6 +63,12 @@ input,select{width:100%;padding:12px;border-radius:12px;border:1px solid var(--l
 .addto{border:0;background:var(--line);color:var(--tx);border-radius:50%;width:24px;height:24px;margin-left:6px;font-size:14px;line-height:1;vertical-align:middle}
 .empty{text-align:center;color:var(--mut);padding:26px 10px}
 .item{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
+.lockbg{position:fixed;inset:0;z-index:50;background:var(--bg);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;padding:20px}
+.pdots{display:flex;gap:14px;margin:10px 0}.pdot{width:14px;height:14px;border-radius:50%;border:2px solid var(--pri)}.pdot.on{background:var(--pri)}
+.keys{display:grid;grid-template-columns:repeat(3,76px);gap:14px;margin-top:8px}
+.key{height:76px;border-radius:50%;border:0;background:var(--card);color:var(--tx);font:inherit;font-size:28px;font-weight:600}
+#prn{display:none}
+@media print{body.printing #app,body.printing #tabs,body.printing #layer,body.printing #login,body.printing #lock{display:none!important}body.printing #prn{display:block;color:#000;background:#fff;padding:10px}#prn table{width:100%;border-collapse:collapse;font-size:12px}#prn td,#prn th{border-bottom:1px solid #ccc;padding:4px;text-align:left}#prn td.r,#prn th.r{text-align:right}}
 .item.drag{background:var(--bg);box-shadow:0 4px 14px rgba(0,0,0,.25);border-radius:12px;position:relative;z-index:2}
 </style>
 </head>
@@ -72,13 +78,19 @@ input,select{width:100%;padding:12px;border-radius:12px;border:1px solid var(--l
   <button data-act="tab" data-v="sum"><b>◔</b>Özet</button>
   <button data-act="tab" data-v="list"><b>☰</b>Varlıklar</button>
   <button data-act="tab" data-v="rates"><b>₺</b>Kurlar</button>
+  <button data-act="tab" data-v="set"><b>⚙</b>Ayarlar</button>
 </nav>
 <div id="layer"></div>
 <div id="login"></div>
+<div id="lock"></div>
+<div id="prn"></div>
 
 <script>
 // ---------- Tanımlar ----------
-const GROUPS = {gold:{n:'Altın',c:'#d9a514'}, fx:{n:'Döviz',c:'#2e9e5b'}, tl:{n:'TL',c:'#3b6fd4'}, stock:{n:'Hisse',c:'#e34d85'}, other:{n:'Diğer',c:'#8b5cf6'}};
+const GROUPS = {gold:{n:'Altın',c:'#d9a514'}, fx:{n:'Döviz',c:'#2e9e5b'}, tl:{n:'TL',c:'#3b6fd4'}, stock:{n:'Hisse',c:'#e34d85'}, crypto:{n:'Kripto',c:'#f7931a'}, fund:{n:'Fon',c:'#0ea5a4'}, deposit:{n:'Vadeli',c:'#6366f1'}, other:{n:'Diğer',c:'#8b5cf6'}, debt:{n:'Borç',c:'#d64545'}};
+const PRICED = ['stock','crypto','fund'];       // adet x birim fiyat
+const NAMEK = ['custom','debt','deposit'];      // ad + para birimi girilenler
+const ALWAYS = ['gold','fx','tl'];
 const KINDS = {
   tl:{n:'TL',g:'tl',u:''},
   usd:{n:'Dolar (USD)',g:'fx',u:''},
@@ -91,7 +103,11 @@ const KINDS = {
   yarim:{n:'Yarım altın',g:'gold',u:'adet'},
   tam:{n:'Tam altın',g:'gold',u:'adet'},
   cumhuriyet:{n:'Cumhuriyet altını',g:'gold',u:'adet'},
-  stock:{n:'Hisse senedi (otomatik fiyat)',g:'stock',u:'adet'}
+  stock:{n:'Hisse senedi (otomatik fiyat)',g:'stock',u:'adet',short:'Hisse'},
+  crypto:{n:'Kripto para (otomatik fiyat)',g:'crypto',u:'adet',short:'Kripto'},
+  fund:{n:'Yatırım fonu',g:'fund',u:'adet',short:'Fon'},
+  deposit:{n:'Vadeli hesap (faizli)',g:'deposit',u:'',short:'Vadeli hesap'},
+  debt:{n:'Borç',g:'debt',u:'',short:'Borç'}
 };
 const RATE_FIELDS = [
   ['usd','Dolar / TL'],['eur','Euro / TL'],['gbp','Sterlin / TL'],
@@ -127,19 +143,28 @@ const uid = () => Date.now().toString(36)+Math.random().toString(36).slice(2,7);
 // ---------- Hesap ----------
 const tlPer = k => k==='tl' ? 1 : k==='bankGram' ? (+S.rates.gram||0) : (+S.rates[k]||0);
 const curSym = c => ({tl:'₺',usd:'$',eur:'€',gbp:'£'}[c]||'');
-const kindOf = a => a.kind==='custom' ? {n:a.typeName||'Diğer',g:'other',u:''} : a.kind==='stock' ? {n:a.typeName||a.symbol||'Hisse',g:'stock',u:'adet'} : (KINDS[a.kind]||KINDS.tl);
-const normAsset = (id,o) => ({id, location:String(o.location||''), owner:String(o.owner||''), kind:(o.kind==='custom'||KINDS[o.kind])?o.kind:'tl', typeName:String(o.typeName||''), cur:['tl','usd','eur','gbp'].includes(o.cur)?o.cur:'tl', amount:+o.amount||0, symbol:String(o.symbol||''), price:+o.price||0, cost:+o.cost||0, order:Math.round(+o.order)||0});
-const tlVal = a => (+a.amount||0) * (a.kind==='stock' ? (+a.price||0)*tlPer(a.cur||'tl') : tlPer(a.kind==='custom' ? (a.cur||'tl') : a.kind));
+const kindOf = a => a.kind==='custom' ? {n:a.typeName||'Diğer',g:'other',u:''} : (PRICED.includes(a.kind)||a.kind==='debt'||a.kind==='deposit') ? {n:a.typeName||a.symbol||KINDS[a.kind].short,g:KINDS[a.kind].g,u:KINDS[a.kind].u} : (KINDS[a.kind]||KINDS.tl);
+const normAsset = (id,o) => ({id, location:String(o.location||''), owner:String(o.owner||''), kind:(o.kind==='custom'||KINDS[o.kind])?o.kind:'tl', typeName:String(o.typeName||''), cur:['tl','usd','eur','gbp'].includes(o.cur)?o.cur:'tl', amount:+o.amount||0, symbol:String(o.symbol||''), price:+o.price||0, cost:+o.cost||0, order:Math.round(+o.order)||0, rate:+o.rate||0, start:String(o.start||''), maturity:String(o.maturity||'')});
+// Vadeli hesap: basit faiz, vadeye kadar işler (brüt, stopaj yok)
+function depDays(a){ const st = Date.parse(a.start), m = Date.parse(a.maturity); if(!isFinite(st)) return 0; const end = isFinite(m) ? Math.min(Date.now(),m) : Date.now(); return Math.max(0,(end-st)/864e5); }
+const tlVal = a => { const q = +a.amount||0;
+  if(PRICED.includes(a.kind)) return q*(+a.price||0)*tlPer(a.cur||'tl');
+  if(a.kind==='debt') return -q*tlPer(a.cur||'tl');
+  if(a.kind==='deposit') return q*(1+(+a.rate||0)/100*depDays(a)/365)*tlPer(a.cur||'tl');
+  return q*tlPer(a.kind==='custom' ? (a.cur||'tl') : a.kind); };
 const plTL = a => (+a.cost>0) ? tlVal(a) - a.cost : null;
 const curInfo = () => CURS.find(c=>c[0]===S.cur) || CURS[0];
 function conv(tl){ return S.cur==='TRY' ? tl : tl / (+S.rates[S.cur.toLowerCase()]||1); }
-function money(tl){
-  if(S.hidden) return '••••••';
-  const ci = curInfo();
-  return ci[1] + Math.round(conv(tl)).toLocaleString('tr-TR');
+function moneyRaw(tl){
+  const v = Math.round(conv(tl));
+  return (v<0?'−':'') + curInfo()[1] + Math.abs(v).toLocaleString('tr-TR');
 }
+function money(tl){ return S.hidden ? '••••••' : moneyRaw(tl); }
+const trDate = d => { const m = /^(\d{4})-(\d\d)-(\d\d)/.exec(d||''); return m ? m[3]+'.'+m[2]+'.'+m[1] : ''; };
+const todayStr = () => { const d = new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); };
+const intr = a => tlVal(a) - (+a.amount||0)*tlPer(a.cur||'tl');
 const sum = items => items.reduce((t,a)=>t+tlVal(a),0);
-const fmtAmt = a => (+a.amount||0).toLocaleString('tr-TR',{maximumFractionDigits:2}) + (a.kind==='custom' ? ' '+String(a.cur||'tl').toUpperCase() : (kindOf(a).u ? ' '+kindOf(a).u : ''));
+const fmtAmt = a => (+a.amount||0).toLocaleString('tr-TR',{maximumFractionDigits:2}) + (NAMEK.includes(a.kind) ? ' '+String(a.cur||'tl').toUpperCase() : (kindOf(a).u ? ' '+kindOf(a).u : ''));
 function groupBy(items, fn){
   const m = new Map();
   items.forEach(a=>{ const k = fn(a)||'—'; if(!m.has(k)) m.set(k,[]); m.get(k).push(a); });
@@ -174,7 +199,7 @@ async function persist(a){
   pending.delete(a.id); delete timers[a.id];
   if(CLOUD){
     if(!fb || !S.user){ toast('Giriş yapılmadı'); return; }
-    const body = {location:a.location, owner:a.owner, kind:a.kind, typeName:a.typeName||'', cur:a.cur||'tl', amount:+a.amount||0, symbol:a.symbol||'', price:+a.price||0, cost:+a.cost||0, order:Math.round(+a.order)||0};
+    const body = {location:a.location, owner:a.owner, kind:a.kind, typeName:a.typeName||'', cur:a.cur||'tl', amount:+a.amount||0, symbol:a.symbol||'', price:+a.price||0, cost:+a.cost||0, order:Math.round(+a.order)||0, rate:+a.rate||0, start:a.start||'', maturity:a.maturity||''};
     try{ await fb.fs.setDoc(fb.fs.doc(fb.db,'assets',a.id), body); }catch(e){ toast('Kaydedilemedi, bağlantını kontrol et'); }
   } else saveLocal();
 }
@@ -210,14 +235,33 @@ async function searchStocks(q){
       .map(x=>({symbol:x.symbol, name:x.longname||x.shortname||x.symbol, ex:x.exchDisp||x.exchange||''}));
   }catch(e){ return null; }
 }
+async function fetchCrypto(ids){
+  try{
+    const r = await fetch('https://api.coingecko.com/api/v3/simple/price?ids='+encodeURIComponent(ids.join(','))+'&vs_currencies=try');
+    const j = await r.json(); const out = {};
+    ids.forEach(i=>{ if(j[i] && j[i].try>0) out[i] = j[i].try; });
+    return out;
+  }catch(e){ return null; }
+}
+async function searchCrypto(q){
+  try{
+    const r = await fetch('https://api.coingecko.com/api/v3/search?query='+encodeURIComponent(q));
+    const j = await r.json();
+    return (j.coins||[]).slice(0,8).map(x=>({symbol:x.id, name:x.name, ex:String(x.symbol||'').toUpperCase()}));
+  }catch(e){ return null; }
+}
 async function refreshStocks(){
   const held = S.assets.filter(a=>a.kind==='stock' && a.symbol);
-  if(!held.length) return;
   for(const sym of [...new Set(held.map(a=>a.symbol))]){
     const q = await fetchQuote(sym); if(!q) continue;
     for(const a of held.filter(x=>x.symbol===sym)){
       if(Math.abs((a.price||0)-q.price)>1e-5 || a.cur!==q.cur){ a.price = q.price; a.cur = q.cur; persist(a); }
     }
+  }
+  const cs = S.assets.filter(a=>a.kind==='crypto' && a.symbol);
+  if(cs.length){
+    const m = await fetchCrypto([...new Set(cs.map(a=>a.symbol))]);
+    if(m) cs.forEach(a=>{ const p = m[a.symbol]; if(p && (Math.abs((a.price||0)-p)>1e-9 || a.cur!=='tl')){ a.price = p; a.cur = 'tl'; persist(a); } });
   }
   render();
 }
@@ -244,7 +288,7 @@ async function fetchRates(){
   render();
 }
 function exportData(){
-  const json = JSON.stringify({assets:S.assets, rates:S.rates});
+  const json = JSON.stringify({assets:S.assets, rates:S.rates, hist});
   const ta = document.getElementById('bk'); if(ta){ ta.value = json; ta.select(); }
   try{ navigator.clipboard.writeText(json).then(()=>toast('Yedek kopyalandı')).catch(()=>toast('Metni elle kopyala')); }catch(e){ toast('Metni elle kopyala'); }
 }
@@ -255,11 +299,131 @@ async function importData(){
     if(!Array.isArray(o.assets)) throw new Error('bad');
     S.assets = o.assets.map(a=>normAsset(String(a.id||uid()).replace(/[^A-Za-z0-9_-]/g,''), a));
     if(o.rates && typeof o.rates==='object') S.rates = {...DEFAULT_RATES, ...o.rates};
+    if(o.hist && typeof o.hist==='object') Object.assign(hist,o.hist);
+    try{ localStorage.setItem('hist',JSON.stringify(hist)); }catch(e){}
     saveLocal(); render(); toast('Yedek yükleniyor…');
     if(CLOUD){ for(const a of S.assets) await persist(a); }
     toast('Yedek yüklendi');
   }catch(e){ toast('Yedek okunamadı'); }
 }
+
+// ---------- Geçmiş (günlük net varlık) ----------
+let hist = {}, histT = 0;
+try{ hist = JSON.parse(localStorage.getItem('hist')||'{}') || {}; }catch(e){}
+async function snapHistory(){
+  if(!S.assets.length) return;
+  const now = Date.now(); if(now-histT<60000) return; histT = now;
+  const key = todayStr();
+  const net = Math.round(sum(S.assets)), debt = Math.round(-sum(S.assets.filter(a=>a.kind==='debt')));
+  hist[key] = {t:net, d:debt};
+  try{ localStorage.setItem('hist',JSON.stringify(hist)); }catch(e){}
+  if(CLOUD && fb && S.user){
+    try{ await fb.fs.setDoc(fb.fs.doc(fb.db,'history',key),{date:key,net,debt}); S.histCloud = true; }
+    catch(e){ S.histCloud = false; }
+  }
+  render();
+}
+async function loadHistory(){
+  if(!(CLOUD && fb && S.user)) return;
+  try{
+    const snap = await fb.fs.getDocs(fb.fs.collection(fb.db,'history'));
+    snap.forEach(d=>{ const o = d.data()||{}; if(typeof o.net==='number') hist[d.id] = {t:o.net, d:+o.debt||0}; });
+    S.histCloud = true;
+    try{ localStorage.setItem('hist',JSON.stringify(hist)); }catch(e){}
+    render();
+  }catch(e){ S.histCloud = false; }
+}
+function histCard(){
+  if(S.hidden) return '';
+  const keys = Object.keys(hist).sort().slice(-120);
+  const head = '<div class="gh" style="margin:0 0 6px"><span>Net varlık geçmişi</span>';
+  if(keys.length<2) return `<div class="card">${head}</span></div><div class="note" style="margin:0">Grafik, uygulamayı açtığın her gün bir nokta ekler. En az 2 gün gerekir.</div></div>`;
+  const vals = keys.map(k=>conv(hist[k].t));
+  const mn = Math.min(...vals), mx = Math.max(...vals), W=300, H=110, Pd=6, rng = (mx-mn)||1;
+  const pts = vals.map((v,i)=>[Pd+i*(W-2*Pd)/(vals.length-1), H-Pd-(v-mn)/rng*(H-2*Pd)]);
+  const line = pts.map(p=>p[0].toFixed(1)+','+p[1].toFixed(1)).join(' ');
+  const chg = vals[vals.length-1]-vals[0], sym = curInfo()[1];
+  const f = v => (v<0?'−':'')+sym+Math.abs(Math.round(v)).toLocaleString('tr-TR');
+  return `<div class="card">${head}<span style="color:${chg>=0?'#1f9d55':'var(--red)'}">${chg>=0?'▲ ':'▼ '}${f(Math.abs(chg))}</span></div>
+    <svg viewBox="0 0 ${W} ${H}" width="100%" height="120" preserveAspectRatio="none"><polygon points="${Pd},${H-Pd} ${line} ${W-Pd},${H-Pd}" fill="var(--pri)" opacity=".12"/><polyline points="${line}" fill="none" stroke="var(--pri)" stroke-width="2.5" stroke-linejoin="round" vector-effect="non-scaling-stroke"/></svg>
+    <div style="display:flex;justify-content:space-between;font-size:12px;color:var(--mut)"><span>${trDate(keys[0])}</span><span>en düşük ${f(mn)} · en yüksek ${f(mx)}</span><span>${trDate(keys[keys.length-1])}</span></div></div>`;
+}
+
+// ---------- Dışa aktarma ----------
+const unitOf = a => { const k = kindOf(a); return k.u ? k.u : (['usd','eur','gbp'].includes(a.kind) ? a.kind.toUpperCase() : String(a.cur||'tl').toUpperCase()); };
+const num2 = n => String(Math.round(n*100)/100).replace('.',',');
+const csvEsc = x => { x = String(x==null?'':x); return /[;"\n]/.test(x) ? '"'+x.replace(/"/g,'""')+'"' : x; };
+const sortedAssets = () => S.assets.slice().sort((x,y)=>(x.location+'|'+x.owner).localeCompare(y.location+'|'+y.owner,'tr') || ((x.order||0)-(y.order||0)));
+function buildCSV(){
+  const rows = [['Konum','Kişi','Grup','Ad','Miktar','Birim','Değer (TL)','Maliyet (TL)','Kâr/Zarar (TL)']];
+  sortedAssets().forEach(a=>{ const k = kindOf(a), pl = a.kind==='deposit' ? intr(a) : plTL(a);
+    rows.push([a.location,a.owner,GROUPS[k.g].n,k.n,num2(a.amount),unitOf(a),num2(tlVal(a)),a.cost?num2(a.cost):'',pl!=null?num2(pl):'']); });
+  const debt = -sum(S.assets.filter(a=>a.kind==='debt'));
+  rows.push([],['','','','Toplam varlık','','',num2(sum(S.assets)+debt)],['','','','Borç','','',num2(debt)],['','','','Net varlık','','',num2(sum(S.assets))]);
+  return '﻿' + rows.map(r=>r.map(csvEsc).join(';')).join('\r\n');
+}
+function downloadCSV(){
+  try{
+    const url = URL.createObjectURL(new Blob([buildCSV()],{type:'text/csv;charset=utf-8'}));
+    const a = document.createElement('a'); a.href = url; a.download = 'varliklar-'+todayStr()+'.csv';
+    document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(url),4000);
+  }catch(e){ toast('İndirilemedi'); }
+}
+function printReport(){
+  const was = S.hidden; S.hidden = false;
+  const rows = sortedAssets().map(a=>{ const k = kindOf(a); return `<tr><td>${esc(a.location)}</td><td>${esc(a.owner)}</td><td>${esc(k.n)}</td><td class="r">${esc(fmtAmt(a))}</td><td class="r">${moneyRaw(tlVal(a))}</td></tr>`; }).join('');
+  const gs = Object.keys(GROUPS).map(g=>({n:GROUPS[g].n,v:sum(S.assets.filter(a=>kindOf(a).g===g)),has:S.assets.some(a=>kindOf(a).g===g)})).filter(x=>x.has).map(x=>`<tr><td colspan="4">${x.n}</td><td class="r">${moneyRaw(x.v)}</td></tr>`).join('');
+  document.getElementById('prn').innerHTML = `<h2>Varlık raporu · ${trDate(todayStr())}</h2><table><tr><th>Konum</th><th>Kişi</th><th>Varlık</th><th class="r">Miktar</th><th class="r">Değer</th></tr>${rows}<tr><th colspan="5">Gruplara göre</th></tr>${gs}<tr><th colspan="4">Net varlık</th><th class="r">${moneyRaw(sum(S.assets))}</th></tr></table>`;
+  S.hidden = was;
+  document.body.classList.add('printing');
+  setTimeout(()=>{ try{ window.print(); }catch(e){ toast('Yazdırma açılamadı'); } },60);
+}
+window.addEventListener('afterprint',()=>document.body.classList.remove('printing'));
+
+// ---------- PIN kilidi (bu cihazda ekran kilidi) ----------
+const sha = async x => {
+  try{ const b = await crypto.subtle.digest('SHA-256', new TextEncoder().encode('vrk|'+x)); return [...new Uint8Array(b)].map(n=>n.toString(16).padStart(2,'0')).join(''); }
+  catch(e){ let h = 5381; for(const c of 'vrk|'+x) h = ((h<<5)+h+c.charCodeAt(0))|0; return 'x'+h; }
+};
+let pinHash = '', pinLen = 4, pinBuf = '', hiddenAt = 0;
+try{ pinHash = localStorage.getItem('pinh')||''; pinLen = +localStorage.getItem('pinl')||4; }catch(e){}
+function showLock(msg){
+  const dots = Array.from({length:pinLen},(_,i)=>`<span class="pdot${i<pinBuf.length?' on':''}"></span>`).join('');
+  const keys = ['1','2','3','4','5','6','7','8','9','','0','⌫'].map(k=>k===''?'<span></span>':`<button class="key" data-act="pk" data-v="${k}">${k}</button>`).join('');
+  document.getElementById('lock').innerHTML = `<div class="lockbg"><h2>Varlıklarımız</h2><div class="note">PIN gir</div><div class="pdots">${dots}</div><div class="note" style="color:var(--red);min-height:18px">${msg||''}</div><div class="keys">${keys}</div></div>`;
+}
+async function pinKey(k){
+  if(k==='⌫') pinBuf = pinBuf.slice(0,-1); else if(pinBuf.length<pinLen) pinBuf += k;
+  if(pinBuf.length===pinLen){
+    const h = await sha(pinBuf); pinBuf = '';
+    if(h===pinHash){ document.getElementById('lock').innerHTML = ''; return; }
+    showLock('Yanlış PIN'); return;
+  }
+  showLock();
+}
+function openPinSheet(){
+  document.getElementById('layer').innerHTML = `<div class="sheetbg" data-act="closebg"><div class="sheet"><h2>${pinHash?'PIN\'i değiştir':'PIN koy'}</h2>
+    <label>Yeni PIN (4 ila 6 rakam)</label><input id="p1" type="password" inputmode="numeric" maxlength="6" autocomplete="off">
+    <label>Tekrar</label><input id="p2" type="password" inputmode="numeric" maxlength="6" autocomplete="off">
+    <div class="note">Bu PIN yalnızca bu cihazdaki ekranı kilitler. Unutursan Safari'de site verisini silmen gerekir; bulut verin silinmez.</div>
+    <div class="btns"><button class="btn" data-act="close">Vazgeç</button><button class="btn p" data-act="pinsave">Kaydet</button></div></div></div>`;
+}
+async function savePin(){
+  const a = document.getElementById('p1').value, b = document.getElementById('p2').value;
+  if(!/^\d{4,6}$/.test(a)){ toast('4 ila 6 rakam yaz'); return; }
+  if(a!==b){ toast('İki PIN aynı değil'); return; }
+  pinHash = await sha(a); pinLen = a.length;
+  try{ localStorage.setItem('pinh',pinHash); localStorage.setItem('pinl',String(pinLen)); }catch(e){}
+  closeSheet(); render(); toast('PIN kaydedildi');
+}
+function removePin(){
+  pinHash = ''; try{ localStorage.removeItem('pinh'); localStorage.removeItem('pinl'); }catch(e){}
+  render(); toast('PIN kaldırıldı');
+}
+document.addEventListener('visibilitychange',()=>{
+  if(document.hidden){ hiddenAt = Date.now(); return; }
+  if(pinHash && hiddenAt && Date.now()-hiddenAt>30000){ pinBuf = ''; showLock(); }
+});
 
 // ---------- Giriş ve bulut eşitleme ----------
 function showLogin(err, mail){
@@ -291,7 +455,7 @@ async function startCloud(){
       if(unsub){ unsub(); unsub=null; }
       S.user = user;
       if(!user){ S.assets = []; showLogin(); render(); return; }
-      hideLogin();
+      hideLogin(); loadHistory();
       unsub = fsm.onSnapshot(fsm.collection(fb.db,'assets'), snap=>{
         const local = new Map(S.assets.map(a=>[a.id,a]));
         S.assets = snap.docs.map(d=>{
@@ -300,7 +464,8 @@ async function startCloud(){
             : normAsset(d.id, o);
         });
         render();
-        if(!S.stk && S.assets.some(a=>a.kind==='stock')){ S.stk = true; refreshStocks(); }
+        if(!S.stk && S.assets.some(a=>a.kind==='stock'||a.kind==='crypto')){ S.stk = true; refreshStocks(); }
+        setTimeout(snapHistory,5000);
       }, ()=>{ toast('Buluta erişilemedi, giriş izni olmayabilir'); });
     });
   }catch(e){
@@ -314,7 +479,9 @@ function init(){
     const r = JSON.parse(localStorage.getItem('rates')||'null'); if(r && typeof r==='object') S.rates = {...DEFAULT_RATES, ...r};
     S.auto = localStorage.getItem('auto')!=='0';
   }catch(e){}
+  if(pinHash) showLock();
   render();
+  if(!CLOUD) setTimeout(snapHistory,5000);
   if(S.auto) fetchRates();
   if(CLOUD) startCloud();
 }
@@ -329,13 +496,14 @@ const PAL = ['#5b6cf0','#13a89e','#f08a24','#e0568c','#8b5cf6','#4cb86b','#b5651
 
 function viewSum(){
   const all = S.assets, total = sum(all);
+  const pos = all.filter(a=>a.kind!=='debt'), gross = sum(pos), debtTL = gross - total;
   let slices;
   if(S.sumMode==='group') slices = Object.keys(GROUPS).map(g=>({n:GROUPS[g].n,c:GROUPS[g].c,v:sum(all.filter(a=>kindOf(a).g===g))})).filter(s=>s.v>0);
-  else slices = groupBy(all, a=>S.sumMode==='loc'?a.location:a.owner).map((g,i)=>({n:g.name,c:PAL[i%PAL.length],v:g.total})).filter(s=>s.v>0);
+  else slices = groupBy(pos, a=>S.sumMode==='loc'?a.location:a.owner).map((g,i)=>({n:g.name,c:PAL[i%PAL.length],v:g.total})).filter(s=>s.v>0);
   const ci = CURS.map(c=>`<button data-act="cur" data-v="${c[0]}" class="${S.cur===c[0]?'on':''}">${c[2]}</button>`).join('');
   const mode = [['group','Türe göre'],['loc','Konuma göre'],['owner','Kişiye göre']].map(m=>`<button data-act="smode" data-v="${m[0]}" class="${S.sumMode===m[0]?'on':''}">${m[1]}</button>`).join('');
-  const minis = Object.keys(GROUPS).filter(g=>(g!=='other'&&g!=='stock')||all.some(a=>kindOf(a).g===g)).map(g=>`<div class="mini"><div class="l"><span class="dot" style="background:${GROUPS[g].c}"></span>${GROUPS[g].n}</div><div class="v">${money(sum(all.filter(a=>kindOf(a).g===g)))}</div></div>`).join('');
-  const legend = slices.map(s=>`<div><span class="dot" style="background:${s.c}"></span><span class="n">${esc(s.n)}</span><span>${money(s.v)}</span><span class="p">${S.hidden?'':'%'+Math.round(s.v/total*100)}</span></div>`).join('');
+  const minis = Object.keys(GROUPS).filter(g=>ALWAYS.includes(g)||all.some(a=>kindOf(a).g===g)).map(g=>`<div class="mini"><div class="l"><span class="dot" style="background:${GROUPS[g].c}"></span>${GROUPS[g].n}</div><div class="v">${money(sum(all.filter(a=>kindOf(a).g===g)))}</div></div>`).join('');
+  const legend = slices.map(s=>`<div><span class="dot" style="background:${s.c}"></span><span class="n">${esc(s.n)}</span><span>${money(s.v)}</span><span class="p">${S.hidden?'':'%'+Math.round(s.v/(gross||1)*100)}</span></div>`).join('');
   const goldKinds = ['gram','bankGram','yarimGram','ceyrek','yarim','tam','cumhuriyet'];
   const gl = goldKinds.map(k=>{ const it = all.filter(a=>a.kind===k); const q = it.reduce((t,a)=>t+(+a.amount||0),0); return q>0 ? {k,q,v:sum(it)} : null; }).filter(Boolean);
   const goldCard = gl.length ? `<div class="card"><div class="gh" style="margin:0 0 6px"><span>Altın varlığımız</span><span>${money(gl.reduce((t,x)=>t+x.v,0))}</span></div>${gl.map(x=>`<div class="item" style="padding:8px 0"><span class="dot" style="background:${GROUPS.gold.c}"></span><div class="m">${esc(KINDS[x.k].n)}</div><div class="r"><div class="t">${S.hidden?'••••':x.q.toLocaleString('tr-TR',{maximumFractionDigits:2})+' '+KINDS[x.k].u}</div><span class="s">${money(x.v)}</span></div></div>`).join('')}</div>` : '';
@@ -345,9 +513,9 @@ function viewSum(){
   return `
   <h1>Varlıklarımız <button class="eye\" data-act="eye">${S.hidden?'🙈':'👁'}</button></h1>
   <div class="seg">${ci}</div>
-  <div class="card hero"><small>Toplam varlık</small><div class="big">${money(total)}</div><small>${S.status||('Kurlar: '+esc(S.rates.updated||''))}</small></div>
+  <div class="card hero"><small>${debtTL>0?'Net varlık':'Toplam varlık'}</small><div class="big">${money(total)}</div>${debtTL>0?`<small>Varlık ${money(gross)} · Borç ${money(debtTL)}</small><br>`:''}<small>${S.status||('Kurlar: '+esc(S.rates.updated||''))}</small></div>
   <div class="row3">${minis}</div>
-  ${plCard}${goldCard}
+  ${plCard}${goldCard}${histCard()}
   <div class="card">
     <div class="seg" style="background:var(--bg)">${mode}</div>
     ${slices.length ? donut(slices)+`<div class="legend">${legend}</div>` : '<div class="empty">Henüz varlık yok.<br>Varlıklar sekmesinden ekleyebilirsin.</div>'}
@@ -362,8 +530,12 @@ function viewList(){
     <div class="card" style="padding:4px 14px">${g.list.map(a=>{
       const k = kindOf(a), quick = !!k.u;
       const sub0 = S.listMode==='loc' ? a.owner : a.location;
-      const sub = a.kind==='stock' && a.symbol ? sub0+' · '+a.symbol.replace('.IS','') : sub0;
-      const pl = plTL(a);
+      let sub = sub0;
+      if(a.kind==='stock' && a.symbol) sub += ' · '+a.symbol.replace('.IS','');
+      if(a.kind==='crypto' && a.symbol) sub += ' · '+a.symbol;
+      if(a.kind==='deposit'){ if(a.rate) sub += ' · %'+fmtIn(a.rate); if(a.maturity) sub += ' · vade '+trDate(a.maturity); }
+      if(a.kind==='debt') sub += ' · borç';
+      const pl = a.kind==='deposit' ? intr(a) : plTL(a);
       return `<div class="item" data-act="edit" data-id="${esc(a.id)}">
         <span class="dot" style="background:${GROUPS[k.g].c}"></span>
         <div class="m"><div class="t">${esc(k.n)}</div><div class="s">${esc(sub)}</div></div>
@@ -377,22 +549,40 @@ function viewList(){
 function viewRates(){
   const inputs = RATE_FIELDS.map(f=>`<div><label>${f[1]}</label><input inputmode="decimal" data-money="1" data-rate="${f[0]}" value="${esc(S.rates[f[0]]!=null?fmtIn(Math.round(S.rates[f[0]]*100)/100):'')}"></div>`).join('');
   const hs = {};
-  S.assets.filter(a=>a.kind==='stock' && a.symbol).forEach(a=>{ const h = hs[a.symbol] || (hs[a.symbol] = {sym:a.symbol,name:a.typeName||a.symbol,price:a.price,cur:a.cur,qty:0}); h.qty += +a.amount||0; });
-  const stockCard = Object.keys(hs).length ? `<div class="card"><div class="gh" style="margin:0 0 4px"><span>Hisselerim</span></div>${Object.values(hs).map(h=>`<div class="item"><span class="dot" style="background:${GROUPS.stock.c}"></span><div class="m"><div class="t">${esc(h.name)}</div><div class="s">${esc(h.sym.replace('.IS',''))} · ${h.qty.toLocaleString('tr-TR',{maximumFractionDigits:2})} adet</div></div><div class="t">${h.price>0 ? curSym(h.cur)+h.price.toLocaleString('tr-TR',{minimumFractionDigits:2,maximumFractionDigits:2}) : '—'}</div></div>`).join('')}<div class="note">Hisse fiyatları Yahoo Finance'ten, yaklaşık 15 dk gecikmelidir. Tarayıcı engellerse telefon uygulamasının en son kaydettiği fiyat gösterilir.</div></div>` : '';
-  return `<h1>Kurlar</h1>${CLOUD&&S.user?`<div class="card"><div class="note" style="margin-top:0">Giriş yapılan hesap: ${esc(S.user.email)}</div><div class="btns"><button class="btn" data-act="logout">Çıkış yap</button></div></div>`:''}
+  S.assets.filter(a=>PRICED.includes(a.kind) && (a.symbol||a.typeName)).forEach(a=>{ const key = a.kind+'|'+(a.symbol||a.typeName); const h = hs[key] || (hs[key] = {sym:a.symbol||'',name:a.typeName||a.symbol,price:a.price,cur:a.cur,kind:a.kind,qty:0}); h.qty += +a.amount||0; });
+  const pcard = Object.keys(hs).length ? `<div class="card"><div class="gh" style="margin:0 0 4px"><span>Fiyatlı varlıklarım</span></div>${Object.values(hs).map(h=>`<div class="item"><span class="dot" style="background:${GROUPS[KINDS[h.kind].g].c}"></span><div class="m"><div class="t">${esc(h.name)}</div><div class="s">${esc(h.sym.replace('.IS',''))}${h.sym?' · ':''}${h.qty.toLocaleString('tr-TR',{maximumFractionDigits:6})} adet</div></div><div class="t">${h.price>0 ? curSym(h.cur)+h.price.toLocaleString('tr-TR',{minimumFractionDigits:2,maximumFractionDigits:2}) : '—'}</div></div>`).join('')}<div class="note">Hisse fiyatları Yahoo Finance'ten (yaklaşık 15 dk gecikmeli), kripto fiyatları CoinGecko'dan gelir. Fon fiyatını elle güncelle. Tarayıcı engellerse telefon uygulamasının en son kaydettiği fiyat gösterilir.</div></div>` : '';
+  return `<h1>Kurlar</h1>
   ${S.status?`<div class="warn">${esc(S.status)}</div>`:''}
   ${S.rates.est?`<div class="warn">Şimdilik 4 Kasım 2026 sabahı değerleri kullanılıyor; Sterlin ve yarım gram tahminidir.</div>`:''}
   <div class="card">
     <div class="note" style="margin-top:0">${S.auto?'Kurlar açılışta internetten otomatik güncellenir.':'Elle girdiğin kurlar kullanılıyor.'} Son güncelleme: ${esc(S.rates.updated||'—')}</div>
     <div class="btns"><button class="btn p" data-act="fetchrates">Şimdi güncelle</button></div>
   </div>
-  ${stockCard}
+  ${pcard}
   <div class="card"><div class="gh" style="margin:0 0 4px"><span>Elle gir</span></div><div class="grid2">${inputs}</div>
     <div class="note">Kuyumcudaki çeyrek, yarım, tam ve cumhuriyet satış fiyatlarını yazabilirsin. Kaydedince otomatik güncelleme kapanır, "Şimdi güncelle" ile tekrar açılır.</div>
     <div class="btns"><button class="btn" data-act="saverates">Elle girdiklerimi kaydet</button></div>
+  </div>`;
+}
+
+function viewSettings(){
+  const nh = Object.keys(hist).length;
+  const hs = !CLOUD ? 'Bu cihazda saklanıyor.' : S.histCloud===true ? 'Bulutta saklanıyor, tüm cihazlarda aynı.' : S.histCloud===false ? 'Bulut izin vermedi, bu cihazda saklanıyor. Firestore kurallarına "history" koleksiyonu için izin eklenirse bulutta tutulur.' : 'Henüz kontrol edilmedi.';
+  return `<h1>Ayarlar</h1>
+  ${CLOUD&&S.user?`<div class="card"><div class="gh" style="margin:0 0 4px"><span>Hesap</span></div><div class="note" style="margin-top:0">Giriş yapılan hesap: ${esc(S.user.email)}</div><div class="btns"><button class="btn" data-act="logout">Çıkış yap</button></div></div>`:''}
+  <div class="card"><div class="gh" style="margin:0 0 4px"><span>Güvenlik</span></div>
+    <div class="note" style="margin-top:0">${pinHash?'PIN kilidi açık ('+pinLen+' haneli). Uygulama açılırken ve 30 saniyeden uzun arka planda kalınca sorulur.':'PIN kilidi kapalı.'} Bu kilit yalnızca bu cihazın ekranını korur.</div>
+    <div class="btns"><button class="btn p" data-act="pinset">${pinHash?'PIN\'i değiştir':'PIN koy'}</button>${pinHash?'<button class="btn" data-act="pinoff">PIN\'i kaldır</button>':''}</div>
+  </div>
+  <div class="card"><div class="gh" style="margin:0 0 4px"><span>Dışa aktar</span></div>
+    <div class="note" style="margin-top:0">Excel dosyası noktalı virgülle ayrılmış CSV olarak iner; Excel'de doğrudan açılır. PDF için yazdırma ekranında "PDF olarak kaydet" seç.</div>
+    <div class="btns"><button class="btn" data-act="csv">Excel (CSV)</button><button class="btn" data-act="print">PDF / Yazdır</button></div>
+  </div>
+  <div class="card"><div class="gh" style="margin:0 0 4px"><span>Geçmiş</span></div>
+    <div class="note" style="margin:0">${nh} günlük net varlık kaydı var. ${esc(hs)}</div>
   </div>
   <div class="card"><div class="gh" style="margin:0 0 4px"><span>Yedek</span></div>
-    <div class="note" style="margin-top:0">${CLOUD?'Kayıtların bulutta saklanır ve senin ile eşinin cihazlarında aynıdır. Yine de arada yedek almak iyidir.':'Veriler yalnızca bu cihazda, bu tarayıcıda durur. Tarayıcı verisi silinirse kaybolur, düzenli yedek al. Başka cihaza da buradan taşıyabilirsin.'}</div>
+    <div class="note" style="margin-top:0">${CLOUD?'Kayıtların bulutta saklanır ve senin ile eşinin cihazlarında aynıdır. Yine de arada yedek almak iyidir.':'Veriler yalnızca bu cihazda, bu tarayıcıda durur. Tarayıcı verisi silinirse kaybolur, düzenli yedek al.'}</div>
     <textarea id="bk" rows="4" style="width:100%;padding:10px;border-radius:12px;border:1px solid var(--line);background:var(--bg);color:var(--tx);font:12px monospace" placeholder="Yedek metni burada görünür veya buraya yapıştır"></textarea>
     <div class="btns"><button class="btn" data-act="export">Yedeği al</button><button class="btn" data-act="import">Yedeği yükle</button></div>
   </div>`;
@@ -402,7 +592,7 @@ function render(){
   if(DR){ DR.pend = true; return; }
   const app = document.getElementById('app');
   const y = window.scrollY;
-  app.innerHTML = S.tab==='sum' ? viewSum() : S.tab==='list' ? viewList() : viewRates();
+  app.innerHTML = S.tab==='sum' ? viewSum() : S.tab==='list' ? viewList() : S.tab==='set' ? viewSettings() : viewRates();
   document.querySelectorAll('#tabs button').forEach(b=>b.classList.toggle('on', b.dataset.v===S.tab));
   window.scrollTo(0,y);
 }
@@ -415,9 +605,9 @@ function openSheet(id, pre){
   const types = [...new Set(S.assets.filter(x=>x.kind==='custom'&&x.typeName).map(x=>x.typeName))].sort();
   let lastOwner = ''; try{ lastOwner = localStorage.getItem('lastOwner')||''; }catch(e){}
   if(!owners.includes(lastOwner)) lastOwner = owners.length===1 ? owners[0] : '';
-  const v = a || Object.assign({location:'',owner:lastOwner,kind:'tl',typeName:'',cur:'tl',amount:0,symbol:'',price:0,cost:0,order:0}, pre||{});
+  const v = a || Object.assign({location:'',owner:lastOwner,kind:'tl',typeName:'',cur:'tl',amount:0,symbol:'',price:0,cost:0,order:0,rate:0,start:todayStr(),maturity:''}, pre||{});
   const kopts = Object.keys(KINDS).map(k=>`<option value="${k}" ${v.kind===k?'selected':''}>${KINDS[k].n}</option>`).join('')
-    + `<option value="custom" ${v.kind==='custom'?'selected':''}>＋ Kendi türüm (fon, araç...)</option>`;
+    + `<option value="custom" ${v.kind==='custom'?'selected':''}>＋ Kendi türüm (araç, ev...)</option>`;
   const copts = [['tl','TL'],['usd','USD'],['eur','EUR'],['gbp','GBP']].map(c=>`<option value="${c[0]}" ${(v.cur||'tl')===c[0]?'selected':''}>${c[1]}</option>`).join('');
   const chips = (list,act,cur) => list.length ? `<div class="chips">${list.map(x=>`<button type="button" class="chip${x===cur?' on':''}" data-act="${act}" data-v="${esc(x)}">${esc(x)}</button>`).join('')}</div>` : '';
   document.getElementById('layer').innerHTML = `
@@ -431,19 +621,25 @@ function openSheet(id, pre){
     ${chips(owners,'pickown',v.owner)}
     <label>Tür</label><select id="f_kind">${kopts}</select>
     <div id="f_custom" style="display:none">
-      <label>Türün adı</label><input id="f_tname" value="${esc(v.kind==='custom'?v.typeName:'')}" placeholder="Örn. Fon, Araç, Kripto">
+      <label id="f_nl">Türün adı</label><input id="f_tname" value="${esc(NAMEK.includes(v.kind)?v.typeName:'')}" placeholder="Örn. Araç, Kredi kartı">
       ${chips(types,'picktype',v.typeName)}
-      <label>Değeri hangi para biriminde giriyorsun</label><select id="f_cur">${copts}</select>
-      <div class="note">Bu türün değeri kurla değişmez, güncel değeri sen yazarsın.</div>
+      <label>Para birimi</label><select id="f_cur">${copts}</select>
+      <div class="note" id="f_cnote">Bu türün değeri kurla değişmez, güncel değeri sen yazarsın.</div>
+    </div>
+    <div id="f_dep" style="display:none">
+      <div class="grid2"><div><label>Yıllık faiz (%)</label><input id="f_rate" data-money="1" inputmode="decimal" value="${v.rate?esc(fmtIn(v.rate)):''}" placeholder="45"></div>
+      <div><label>Başlangıç</label><input id="f_start" type="date" value="${esc(v.start||'')}"></div></div>
+      <label>Vade tarihi</label><input id="f_mat" type="date" value="${esc(v.maturity||'')}">
+      <div class="note">Faiz basit olarak günlük işler ve vadede durur; brüt tutardır, stopaj düşülmez.</div>
     </div>
     <div id="f_stock" style="display:none">
-      <label>Hisse ara (şirket adı veya sembol, örn. THY)</label><input id="f_q" autocomplete="off" autocapitalize="none" placeholder="Aramak için yaz">
-      <div id="f_hits"></div>
-      <label>Sembol (BIST için sonuna .IS, örn. THYAO.IS)</label><input id="f_sym" value="${esc(v.symbol)}" autocapitalize="characters" autocomplete="off" placeholder="THYAO.IS">
-      <label>Hisse adı</label><input id="f_sname" value="${esc(v.kind==='stock'?v.typeName:'')}" placeholder="Örn. Türk Hava Yolları">
+      <div id="f_qw"><label id="f_ql">Ara</label><input id="f_q" autocomplete="off" autocapitalize="none" placeholder="Aramak için yaz">
+      <div id="f_hits"></div></div>
+      <label id="f_syml">Sembol</label><input id="f_sym" value="${esc(v.symbol)}" autocapitalize="none" autocomplete="off" placeholder="THYAO.IS">
+      <label>Adı</label><input id="f_sname" value="${esc(PRICED.includes(v.kind)?v.typeName:'')}" placeholder="Örn. Türk Hava Yolları">
       <div class="grid2"><div><label>Birim fiyat</label><input id="f_price" data-money="1" inputmode="decimal" value="${v.price?esc(fmtIn(v.price)):''}"></div>
       <div><label>Para birimi</label><select id="f_scur">${copts}</select></div></div>
-      <div class="note">Fiyat sayfa açılınca otomatik güncellenir; alınamazsa son kaydedilen veya elle yazdığın fiyat kullanılır.</div>
+      <div class="note" id="f_pnote"></div>
     </div>
     <div class="grid2"><div><label id="f_aml">Miktar</label><input id="f_amt" data-money="1" inputmode="decimal" value="${a?esc(fmtIn(v.amount)):''}"></div>
     <div><label>Ekle / çıkar (örn. 2 veya -2)</label><input id="f_dlt" data-money="1" data-neg="1" inputmode="text" placeholder="0"></div></div>
@@ -451,12 +647,18 @@ function openSheet(id, pre){
     <div class="btns">${a?'<button class="btn d" data-act="del" data-id="'+esc(a.id)+'">Sil</button>':''}<button class="btn" data-act="close">Vazgeç</button><button class="btn p" data-act="save" data-id="${a?esc(a.id):''}">Kaydet</button>${a?'':'<button class="btn" data-act="savenew">Kaydet, yenisini ekle</button>'}</div>
   </div></div>`;
   const upd = () => {
-    const kv = document.getElementById('f_kind').value;
-    document.getElementById('f_custom').style.display = kv==='custom' ? 'block' : 'none';
-    document.getElementById('f_stock').style.display = kv==='stock' ? 'block' : 'none';
-    document.getElementById('f_costw').style.display = (kv==='tl'||kv==='custom') ? 'none' : 'block';
+    const kv = document.getElementById('f_kind').value, pr = PRICED.includes(kv);
+    const show = (i,on) => { document.getElementById(i).style.display = on ? 'block' : 'none'; };
+    const txt = (i,t) => { document.getElementById(i).textContent = t; };
+    show('f_custom', NAMEK.includes(kv)); show('f_stock', pr); show('f_dep', kv==='deposit');
+    show('f_qw', kv==='stock'||kv==='crypto'); show('f_cnote', kv==='custom');
+    show('f_costw', !['tl','custom','debt','deposit'].includes(kv));
     const u = kv==='custom' ? 'v' : KINDS[kv].u;
-    document.getElementById('f_aml').textContent = kv==='stock'?'Adet (lot)':u==='gr'?'Gram':u==='adet'?'Adet':u==='v'?'Toplam değer':'Tutar';
+    txt('f_aml', ({stock:'Adet (lot)',crypto:'Miktar',fund:'Adet (pay)',debt:'Borç tutarı',deposit:'Anapara',custom:'Toplam değer'})[kv] || (u==='gr'?'Gram':u==='adet'?'Adet':'Tutar'));
+    txt('f_nl', ({custom:'Türün adı',debt:'Borcun adı (örn. Kredi kartı, konut kredisi)',deposit:'Hesap adı (isteğe bağlı)'})[kv] || 'Ad');
+    txt('f_syml', ({stock:'Sembol (BIST için sonuna .IS, örn. THYAO.IS)',crypto:'CoinGecko kimliği (örn. bitcoin)',fund:'Fon kodu (isteğe bağlı, örn. TCD)'})[kv] || 'Sembol');
+    txt('f_ql', kv==='crypto' ? 'Kripto ara (örn. bitcoin, eth)' : 'Hisse ara (şirket adı veya sembol, örn. THY)');
+    txt('f_pnote', kv==='fund' ? 'Fon fiyatı otomatik çekilmez; güncel birim fiyatı sen yaz.' : 'Fiyat sayfa açılınca otomatik güncellenir; alınamazsa son kaydedilen veya elle yazdığın fiyat kullanılır.');
   };
   document.getElementById('f_kind').addEventListener('change',upd); upd();
   let qt;
@@ -466,9 +668,9 @@ function openSheet(id, pre){
     if(q.length<2){ box.innerHTML=''; return; }
     qt = setTimeout(async()=>{
       box.innerHTML = '<div class="note">Aranıyor…</div>';
-      const r = await searchStocks(q);
+      const r = await (document.getElementById('f_kind').value==='crypto' ? searchCrypto(q) : searchStocks(q));
       const cur = document.getElementById('f_q'); if(!cur || cur.value.trim()!==q) return;
-      if(r===null){ box.innerHTML = '<div class="note">Arama bu tarayıcıda çalışmıyor. Sembolü elle yaz (örn. THYAO.IS).</div>'; return; }
+      if(r===null){ box.innerHTML = '<div class="note">Arama bu tarayıcıda çalışmıyor. Sembolü elle yaz.</div>'; return; }
       box.innerHTML = r.length ? '<div class="chips" style="flex-direction:column;align-items:stretch">'+r.map(x=>`<button type="button" class="chip" style="text-align:left;border-radius:12px" data-act="pickstock" data-sym="${esc(x.symbol)}" data-name="${esc(x.name)}">${esc(x.name)}<br><small>${esc(x.symbol)}${x.ex?' · '+esc(x.ex):''}</small></button>`).join('')+'</div>' : '<div class="note">Sonuç bulunamadı. Sembolü elle yazabilirsin.</div>';
     },500);
   });
@@ -481,22 +683,27 @@ async function saveSheet(id, again){
   const owner = document.getElementById('f_own').value.trim();
   if(!owner){ toast('Kimin olduğunu yaz'); return; }
   const kind = document.getElementById('f_kind').value;
-  let typeName = kind==='custom' ? document.getElementById('f_tname').value.trim() : kind==='stock' ? document.getElementById('f_sname').value.trim() : '';
+  const pr = PRICED.includes(kind), nk = NAMEK.includes(kind);
+  let typeName = nk ? document.getElementById('f_tname').value.trim() : pr ? document.getElementById('f_sname').value.trim() : '';
   if(kind==='custom' && !typeName){ toast('Türün adını yaz'); return; }
   let symbol = '', price = 0;
-  if(kind==='stock'){
-    symbol = document.getElementById('f_sym').value.trim().toUpperCase();
-    if(!symbol){ toast('Hisse sembolünü yaz'); return; }
+  if(pr){
+    symbol = document.getElementById('f_sym').value.trim();
+    symbol = kind==='stock' ? symbol.toUpperCase() : kind==='crypto' ? symbol.toLowerCase() : symbol;
+    if(!symbol && kind!=='fund'){ toast(kind==='crypto'?'Kripto kimliğini yaz':'Hisse sembolünü yaz'); return; }
     price = Math.max(0, numTR(document.getElementById('f_price').value));
-    if(!typeName) typeName = symbol.replace('.IS','');
+    if(!typeName) typeName = kind==='stock' ? symbol.replace('.IS','') : kind==='crypto' ? symbol : 'Fon';
   }
-  const cur = kind==='custom' ? document.getElementById('f_cur').value : kind==='stock' ? document.getElementById('f_scur').value : 'tl';
-  const cost = (kind==='tl'||kind==='custom') ? 0 : Math.max(0, numTR(document.getElementById('f_cost').value));
+  const cur = nk ? document.getElementById('f_cur').value : pr ? document.getElementById('f_scur').value : 'tl';
+  const cost = ['tl','custom','debt','deposit'].includes(kind) ? 0 : Math.max(0, numTR(document.getElementById('f_cost').value));
+  const rate = kind==='deposit' ? Math.max(0, numTR(document.getElementById('f_rate').value)) : 0;
+  const start = kind==='deposit' ? document.getElementById('f_start').value : '';
+  const maturity = kind==='deposit' ? document.getElementById('f_mat').value : '';
   const amount = Math.max(0, numTR(document.getElementById('f_amt').value) + numTR(document.getElementById('f_dlt').value));
   try{ localStorage.setItem('lastOwner',owner); }catch(e){}
   let a = id ? S.assets.find(x=>x.id===id) : null;
-  if(a){ Object.assign(a,{location:loc,owner,kind,typeName,cur,amount,symbol,price,cost}); }
-  else { a = {id:uid(),location:loc,owner,kind,typeName,cur,amount,symbol,price,cost,order:0}; S.assets.push(a); }
+  if(a){ Object.assign(a,{location:loc,owner,kind,typeName,cur,amount,symbol,price,cost,rate,start,maturity}); }
+  else { a = {id:uid(),location:loc,owner,kind,typeName,cur,amount,symbol,price,cost,order:0,rate,start,maturity}; S.assets.push(a); }
   closeSheet(); render();
   if(again) openSheet(null,{location:loc,owner});
   await persist(a);
@@ -527,13 +734,20 @@ document.addEventListener('click', e=>{
     document.getElementById('f_sym').value = el.dataset.sym;
     document.getElementById('f_sname').value = el.dataset.name;
     document.getElementById('f_hits').innerHTML = '<div class="note">Fiyat alınıyor…</div>';
-    fetchQuote(el.dataset.sym).then(q=>{
+    const isCrypto = document.getElementById('f_kind').value==='crypto';
+    (isCrypto ? fetchCrypto([el.dataset.sym]).then(m=>m&&m[el.dataset.sym]?{price:m[el.dataset.sym],cur:'tl'}:null) : fetchQuote(el.dataset.sym)).then(q=>{
       const h = document.getElementById('f_hits'); if(!h) return;
       if(q){ document.getElementById('f_price').value = fmtIn(q.price); document.getElementById('f_scur').value = q.cur; h.innerHTML = ''; }
       else h.innerHTML = '<div class="note">Fiyat alınamadı, aşağıya elle yazabilirsin.</div>';
     });
   }
   else if(act==='picktype') pick(el,'f_tname');
+  else if(act==='pk') pinKey(v);
+  else if(act==='pinset') openPinSheet();
+  else if(act==='pinsave') savePin();
+  else if(act==='pinoff') removePin();
+  else if(act==='csv') downloadCSV();
+  else if(act==='print') printReport();
   else if(act==='savenew') saveSheet(null,true);
   else if(act==='edit') openSheet(id);
   else if(act==='close') closeSheet();
