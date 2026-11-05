@@ -216,11 +216,17 @@ function adjust(id,d){
 }
 // ---------- Hisse fiyatları (Yahoo Finance, ~15 dk gecikmeli, resmi olmayan kaynak) ----------
 // Tarayıcılar bu istekleri engelleyebilir; o zaman telefon uygulamasının buluta kaydettiği son fiyat kullanılır.
+// Yahoo tarayıcıdan doğrudan erişime izin vermez (CORS); önce doğrudan, olmazsa ücretsiz bir aktarıcı üzerinden denenir.
+async function yget(url){
+  try{ const r = await fetch(url); if(r.ok) return await r.json(); }catch(e){}
+  try{ const r = await fetch('https://api.allorigins.win/raw?url='+encodeURIComponent(url)); if(r.ok) return await r.json(); }catch(e){}
+  return null;
+}
 const YCUR = {TRY:'tl',USD:'usd',EUR:'eur',GBP:'gbp'};
 async function fetchQuote(sym){
   try{
-    const r = await fetch('https://query1.finance.yahoo.com/v8/finance/chart/'+encodeURIComponent(sym)+'?interval=1d&range=1d');
-    const j = await r.json(); const m = j.chart.result[0].meta;
+    const j = await yget('https://query1.finance.yahoo.com/v8/finance/chart/'+encodeURIComponent(sym)+'?interval=1d&range=1d');
+    const m = j.chart.result[0].meta;
     let price = +m.regularMarketPrice, c = m.currency;
     if(c==='GBp'||c==='GBX'){ price /= 100; c = 'GBP'; }
     if(!(price>0) || !YCUR[c]) return null;
@@ -229,8 +235,8 @@ async function fetchQuote(sym){
 }
 async function searchStocks(q){
   try{
-    const r = await fetch('https://query2.finance.yahoo.com/v1/finance/search?q='+encodeURIComponent(q)+'&quotesCount=10&newsCount=0&lang=tr-TR&region=TR');
-    const j = await r.json();
+    const j = await yget('https://query2.finance.yahoo.com/v1/finance/search?q='+encodeURIComponent(q)+'&quotesCount=10&newsCount=0&lang=tr-TR&region=TR');
+    if(!j) return null;
     return (j.quotes||[]).filter(x=>x.symbol && (x.quoteType==='EQUITY'||x.quoteType==='ETF'))
       .map(x=>({symbol:x.symbol, name:x.longname||x.shortname||x.symbol, ex:x.exchDisp||x.exchange||''}));
   }catch(e){ return null; }
