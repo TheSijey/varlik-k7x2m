@@ -162,6 +162,10 @@ function moneyRaw(tl){
 function money(tl){ return S.hidden ? '••••••' : moneyRaw(tl); }
 const trDate = d => { const m = /^(\d{4})-(\d\d)-(\d\d)/.exec(d||''); return m ? m[3]+'.'+m[2]+'.'+m[1] : ''; };
 const todayStr = () => { const d = new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); };
+// Vade sonu tutarı (TL karşılığı) ve kalan gün
+function depTerm(a){ const st = Date.parse(a.start), m = Date.parse(a.maturity); return (isFinite(st)&&isFinite(m)&&m>st) ? (m-st)/864e5 : 0; }
+const matVal = a => (+a.amount||0)*(1+(+a.rate||0)/100*depTerm(a)/365)*tlPer(a.cur||'tl');
+const daysLeft = a => { const m = Date.parse(a.maturity); return isFinite(m) ? Math.ceil((m-Date.now())/864e5) : null; };
 const intr = a => tlVal(a) - (+a.amount||0)*tlPer(a.cur||'tl');
 const sum = items => items.reduce((t,a)=>t+tlVal(a),0);
 const fmtAmt = a => (+a.amount||0).toLocaleString('tr-TR',{maximumFractionDigits:2}) + (NAMEK.includes(a.kind) ? ' '+String(a.cur||'tl').toUpperCase() : (kindOf(a).u ? ' '+kindOf(a).u : ''));
@@ -586,14 +590,14 @@ function viewList(){
       let sub = sub0;
       if(a.kind==='stock' && a.symbol) sub += ' · '+a.symbol.replace('.IS','');
       if(a.kind==='crypto' && a.symbol) sub += ' · '+a.symbol;
-      if(a.kind==='deposit'){ if(a.rate) sub += ' · %'+fmtIn(a.rate); if(a.maturity) sub += ' · vade '+trDate(a.maturity); }
+      if(a.kind==='deposit'){ if(a.rate) sub += ' · %'+fmtIn(a.rate); if(a.maturity){ sub += ' · vade '+trDate(a.maturity); const dl = daysLeft(a); if(dl!=null) sub += dl>0 ? ' ('+dl+' gün kaldı)' : ' (vade doldu)'; } }
       if(a.kind==='debt') sub += ' · borç';
       const pl = a.kind==='deposit' ? intr(a) : plTL(a);
       return `<div class="item" data-act="edit" data-id="${esc(a.id)}">
         <span class="dot" style="background:${GROUPS[k.g].c}"></span>
         <div class="m"><div class="t">${esc(k.n)}</div><div class="s">${esc(sub)}</div></div>
         ${quick?`<button class="pm" data-act="adj" data-id="${esc(a.id)}" data-d="-1">−</button>`:''}
-        <div class="r"><div class="t">${S.hidden?'••••':fmtAmt(a)}</div><span class="s">${money(tlVal(a))}</span>${pl!=null&&!S.hidden?`<span class="s" style="color:${pl>=0?'#1f9d55':'var(--red)'}">${pl>=0?'▲ ':'▼ '}${money(Math.abs(pl))}</span>`:''}</div>
+        <div class="r"><div class="t">${S.hidden?'••••':fmtAmt(a)}</div><span class="s">${money(tlVal(a))}</span>${a.kind==='deposit'&&a.maturity&&depTerm(a)>0?`<span class="s">vadede ${money(matVal(a))}</span>`:''}${pl!=null&&!S.hidden?`<span class="s" style="color:${pl>=0?'#1f9d55':'var(--red)'}">${pl>=0?'▲ ':'▼ '}${money(Math.abs(pl))}</span>`:''}</div>
         ${quick?`<button class="pm" data-act="adj" data-id="${esc(a.id)}" data-d="1">+</button>`:''}
       </div>`; }).join('')}</div>`).join('');
   return `<h1>Varlıklar</h1><div class="seg">${mode}</div>${body || '<div class="empty">Henüz varlık yok.<br>Sağ alttaki + ile ekle.</div>'}<button class="fab" data-act="add">+</button>`;
